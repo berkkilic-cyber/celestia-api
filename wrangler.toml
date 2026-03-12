@@ -1,0 +1,19 @@
+name = "celestia-api"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[triggers]
+crons = ["0 0 1 * *"]
+
+[[kv_namespaces]]
+binding = "NATAL_ANALYSIS_KV"
+id = "632235519795466ba6d965d4a3d134dc"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "celestia-db"
+database_id = "3cfcb7e0-6750-4f09-adc9-dfff4f576317"
+
+[vars]
+APPLE_CLIENT_ID  = "com.yourcompany.celestia"
+GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID"

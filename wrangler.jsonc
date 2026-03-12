@@ -18,7 +18,17 @@
 		"enabled": true
 	},
 	"kv_namespaces": [
-		{ "binding": "NATAL_ANALYSIS_KV", "id": "632235519795466ba6d965d4a3d134dc" }
+		{
+			"binding": "NATAL_ANALYSIS_KV",
+			"id": "632235519795466ba6d965d4a3d134dc"
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "celestia_db",
+			"database_name": "celestia-db",
+			"database_id": "3cfcb7e0-6750-4f09-adc9-dfff4f576317"
+		}
 	]
 	/**
 	 * Smart Placement

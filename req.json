@@ -1,0 +1,12 @@
+{
+  "action":"natal_map_summary",
+  "lang":"tr",
+  "userId":"debug_u_1997_09_08_2026_01_13",
+  "payload":{
+    "birthData":{
+      "year":1997,"month":9,"day":8,"hour":15,"minute":45,
+      "tzOffsetMinutes":180,"latitude":41.0169,"longitude":29.0955
+    },
+    "chart": {"asc": 95.45102425341918, "ascDetail": {"deg": 5, "lon": 95.45102425341918, "min": 27, "sign": "Cancer", "signIndex": 4}, "houses": [90, 120, 150, 180, 210, 240, 270, 300, 330, 0, 30, 60], "mc": 30.05559816405148, "mcDetail": {"deg": 0, "lon": 30.05559816405148, "min": 3, "sign": "Taurus", "signIndex": 2}, "planets": [{"deg": 17, "glyph": "☉", "house": 3, "lon": 167.0542167178756, "min": 3, "name": "Sun", "retrograde": false, "sign": "Virgo", "signIndex": 6}, {"deg": 26, "glyph": "☽", "house": 5, "lon": 236.74143953378365, "min": 44, "name": "Moon", "retrograde": false, "sign": "Scorpio", "signIndex": 8}, {"deg": 4, "glyph": "☿", "house": 3, "lon": 154.21065643607295, "min": 12, "name": "Mercury", "retrograde": true, "sign": "Virgo", "signIndex": 6}, {"deg": 23, "glyph": "♀", "house": 4, "lon": 203.82167948562568, "min": 49, "name": "Venus", "retrograde": false, "sign": "Libra", "signIndex": 7}, {"deg": 13, "glyph": "♂", "house": 5, "lon": 223.40289968257267, "min": 24, "name": "Mars", "retrograde": false, "sign": "Scorpio", "signIndex": 8}, {"deg": 16, "glyph": "♃", "house": 8, "lon": 316.2971713326134, "min": 17, "name": "Jupiter", "retrograde": true, "sign": "Aquarius", "signIndex": 11}, {"deg": 18, "glyph": "♄", "house": 10, "lon": 18.768552502516847, "min": 46, "name": "Saturn", "retrograde": true, "sign": "Aries", "signIndex": 1}, {"deg": 7, "glyph": "♅", "house": 8, "lon": 307.80256827377707, "min": 48, "name": "Uranus", "retrograde": true, "sign": "Aquarius", "signIndex": 11}, {"deg": 29, "glyph": "♆", "house": 7, "lon": 299.446630252628, "min": 26, "name": "Neptune", "retrograde": true, "sign": "Capricorn", "signIndex": 10}, {"deg": 3, "glyph": "♇", "house": 6, "lon": 243.38735730433865, "min": 23, "name": "Pluto", "retrograde": false, "sign": "Sagittarius", "signIndex": 9}, {"deg": 9, "glyph": "☊", "house": 6, "lon": 249.68722281590806, "min": 41, "name": "North Node", "retrograde": false, "sign": "Sagittarius", "signIndex": 9}, {"deg": 9, "glyph": "☋", "house": 12, "lon": 69.68722281590806, "min": 41, "name": "South Node", "retrograde": false, "sign": "Gemini", "signIndex": 3}]}
+  }
+}
