@@ -17,3 +17,5 @@ database_id = "3cfcb7e0-6750-4f09-adc9-dfff4f576317"
 [vars]
 APPLE_CLIENT_ID  = "com.yourcompany.celestia"
 GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID"
+LLAMA_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+LLAMA_API_KEY = "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"
