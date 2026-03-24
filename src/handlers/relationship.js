@@ -1,9 +1,9 @@
 // src/handlers/relationship.js
-import { callOpenAI } from "../lib/openai.js";
+import { callLlama } from "../lib/llama.js";
 import { buildChartFacts, formatSynastryAspects } from "../lib/chart.js";
 
 const VALID_RELATION_TYPES = ["romantic", "family", "friendship", "business"];
-const CFG = { model: "gpt-4o-mini", max_output_tokens: 500, temperature: 0.7 };
+const CFG = { model: "meta-llama/Llama-2-70b-chat-hf", max_output_tokens: 500, temperature: 0.7 };
 
 function buildCacheKey(person1, person2, relationType) {
   const personStr = (p) => {
@@ -69,50 +69,55 @@ export async function handleRelationshipScore(request, env) {
     if (cached) return { data: cached };
   } catch (_) {}
 
-  const system = "You are an expert astrologer.";
-  const user = `Analyze the provided synastry aspects and composite chart to generate a relationship compatibility reading.
+  const system = "You are a warm, compassionate astrologer reading the dynamics between two souls. You honor both their gifts and growth edges, seeing relationships as sacred mirrors for evolution.";
+  const user = `Analyze the synastry aspects and composite chart for this relationship with warmth and truth.
 
-Relation type: ${relationType}
+Relationship type: ${relationType}
 
-Person 1 (${person1.name}): ${buildChartFacts(person1.chart)}
+${person1.name}\'s chart: ${buildChartFacts(person1.chart)}
 
-Person 2 (${person2.name}): ${buildChartFacts(person2.chart)}
+${person2.name}\'s chart: ${buildChartFacts(person2.chart)}
 
-Composite chart: ${buildChartFacts(compositeChart)}
+Composite chart (the relationship itself): ${buildChartFacts(compositeChart)}
 
-Synastry aspects: ${formatSynastryAspects(synastryAspects)}
+Synastry aspects (how they ignite each other): ${formatSynastryAspects(synastryAspects)}
 
-Return ONLY valid JSON with this exact structure, no markdown, no preamble:
+Create a beautiful, honest relationship reading as JSON with this structure:
 {
-  "overallScore": <number 0-100>,
-  "generalText": "<30-40 token Turkish text summarizing harmony based on actual aspects>",
+  "overallScore": <number 0-100 representing the relationship's potential and harmony>,
+  "generalText": "<30-40 words in Turkish capturing the essence of their dynamic and what makes it special>",
   "tags": [
-    {"emoji": "<1 emoji>", "label": "<1-2 word Turkish label>"},
+    {"emoji": "<1 emoji>", "label": "<1-2 word Turkish label for a key relationship strength or theme>"},
     {"emoji": "<1 emoji>", "label": "<1-2 word Turkish label>"},
     {"emoji": "<1 emoji>", "label": "<1-2 word Turkish label>"}
   ],
-  "suggestion": "<10-15 token Turkish actionable suggestion for this pair>",
+  "suggestion": "<10-15 words of Turkish wisdom—what this pair should know or do to nurture their bond>",
   "breakdown": {
-    "<cat1>": <number 0-100>,
-    "<cat2>": <number 0-100>,
-    "<cat3>": <number 0-100>,
-    "<cat4>": <number 0-100>
+    "<area1>": <0-100>,
+    "<area2>": <0-100>,
+    "<area3>": <0-100>,
+    "<area4>": <0-100>
   }
 }
 
-Breakdown categories by relation type:
-- romantic:   Tutku, İletişim, Güven, Enerji
-- family:     Bağlılık, İletişim, Anlayış, Enerji
-- friendship: Eğlence, İletişim, Güven, Enerji
-- business:   Liderlik, İletişim, Güven, Vizyon
+Scoring guidelines:
+- Ground ALL scores in actual synastry aspects and composite chart placements
+- Range: 55-100 (relationships have inherent value)
+- overallScore = weighted average: first two categories × 0.3 each, last two × 0.2 each
+- Share honest insights—strengths AND growth edges
 
-Scoring: base ALL scores on actual synastry aspects. Scores range 55-100.
-overallScore = weighted average (first two categories 0.3 each, last two 0.2 each).
-Write ALL text in correct Turkish (ç, ş, ğ, ı, ö, ü, İ).`;
+Breakdown categories by relationship type:
+- romantic:   Passion & Attraction, Communication, Trust & Vulnerability, Shared Energy
+- family:     Loyalty & Bonds, Communication, Understanding, Shared Energy
+- friendship: Fun & Connection, Communication, Trust, Shared Energy
+- business:   Leadership & Vision, Communication, Trust & Reliability, Synergy
+
+Write ALL text in beautiful, correct Turkish (ç, ş, ğ, ı, ö, ü, İ).
+No markdown. Valid JSON only.`;
 
   let result;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const out = await callOpenAI(env, CFG, system, user);
+    const out = await callLlama(env, CFG, system, user);
     if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
     try { result = parseResponse(out.text); break; }
     catch (e) {
