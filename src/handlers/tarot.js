@@ -31,7 +31,7 @@ const TONE_MAP = {
 	celtic_cross: 'deep and comprehensive',
 };
 
-const CFG = { model: 'meta-llama/Llama-2-70b-chat-hf', max_output_tokens: 1500, temperature: 0.85 };
+const CFG = { model: 'meta-llama/Llama-3.1-8b-instruct', max_output_tokens: 1500, temperature: 0.85 };
 
 function formatCards(cards, spreadType) {
 	const positions = SPREAD_POSITIONS[spreadType];

@@ -6,8 +6,8 @@ import { pickLocale } from '../lib/locale.js';
 
 const BIRTH_FIELDS = ['year', 'month', 'day', 'hour', 'minute', 'tzOffsetMinutes', 'latitude', 'longitude'];
 const CHAT_SESSION_TTL = 86400; // 24 hours
-const CHAT_CFG = { model: 'meta-llama/Llama-2-70b-chat-hf', max_output_tokens: 1000, temperature: 0.8 };
-const ANALYSIS_CFG = { model: 'meta-llama/Llama-2-70b-chat-hf', max_output_tokens: 1200, temperature: 0.8 };
+const CHAT_CFG = { model: 'meta-llama/Llama-3.1-8b-instruct', max_output_tokens: 1000, temperature: 0.8 };
+const ANALYSIS_CFG = { model: 'meta-llama/Llama-3.1-8b-instruct', max_output_tokens: 1200, temperature: 0.8 };
 
 // ─── /natal ──────────────────────────────────────────────────────────────────
 
