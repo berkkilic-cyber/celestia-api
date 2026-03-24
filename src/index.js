@@ -2,14 +2,15 @@
 // ── Router only. No business logic here. ──────────────────────────────────────
 
 import { computeComposite } from "./natal-core.js";
-import { validateSession, extractToken } from "./auth/session.js";
-import { gateCredits } from "./middleware/credits.js";
+// import { validateSession, extractToken } from "./auth/session.js";
+// import { gateCredits } from "./middleware/credits.js";
 
 import { handleNatal, handleNatalAnalysis, handleNatalChat } from "./handlers/natal.js";
 import { handleTarot } from "./handlers/tarot.js";
 import { handleRelationshipScore } from "./handlers/relationship.js";
 import { handleAI } from "./handlers/ai.js";
-import { handleAppleAuth, handleGoogleAuth, handleLogout, handleGetMe, handleGetCredits } from "./handlers/auth.js";
+// import { handleAppleAuth, handleGoogleAuth, handleGuestAuth, handleLogout, handleGetMe, handleGetCredits } from "./handlers/auth.js";
+import { handlePlacesAutocomplete, handlePlacesDetails } from "./handlers/places.js";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -24,13 +25,12 @@ function json(data, status = 200) {
   });
 }
 
-// Routes that require auth + credit gating
-const PROTECTED_AI_ROUTES = new Set([
-  "/natal-analysis",
-  "/natal-chat",
-  "/relationship-score",
-  "/ai",
-]);
+// // Routes that require auth + credit gating
+// const PROTECTED_AI_ROUTES = new Set([
+//   "/natal-chat",
+//   "/relationship-score",
+//   "/ai",
+// ]);
 
 export default {
   async fetch(request, env) {
@@ -47,13 +47,19 @@ export default {
       // ── Health ───────────────────────────────────────────────────────────
       if (path === "/health") return json({ status: "ok" });
 
-      // ── Public auth routes ───────────────────────────────────────────────
-      if (path === "/auth/apple")  return dispatch(await handleAppleAuth(request, env));
-      if (path === "/auth/google") return dispatch(await handleGoogleAuth(request, env));
-      if (path === "/auth/logout") return dispatch(await handleLogout(request, env));
+      // // ── Public auth routes ───────────────────────────────────────────────
+      // if (path === "/auth/apple")  return dispatch(await handleAppleAuth(request, env));
+      // if (path === "/auth/google") return dispatch(await handleGoogleAuth(request, env));
+      // if (path === "/auth/guest" && request.method === "POST") return dispatch(await handleGuestAuth(env));
+      // if (path === "/auth/logout") return dispatch(await handleLogout(request, env));
+
+      // ── Google Places (public) ─────────────────────────────────────────
+      if (path === "/places/autocomplete") return dispatch(await handlePlacesAutocomplete(request, env));
+      if (path === "/places/details")      return dispatch(await handlePlacesDetails(request, env));
 
       // ── Fully public compute routes (no AI, no cost) ─────────────────────
-      if (path === "/natal")     return dispatch(await handleNatal(request));
+      if (path === "/natal")          return dispatch(await handleNatal(request));
+      if (path === "/natal-analysis") return dispatch(await handleNatalAnalysis(request, env));
       if (path === "/composite") {
         const body = await request.json();
         const needed = ["year","month","day","hour","minute","tzOffsetMinutes","latitude","longitude"];
@@ -64,57 +70,17 @@ export default {
         return json(computeComposite(body.person1, body.person2));
       }
 
-      // ── Tarot: soft gate (free spreads public, paid spreads require auth) ─
-      if (path === "/tarot") {
-        const bodyText = await request.text();
-        const body = JSON.parse(bodyText);
-        const spread = body?.spreadType;
-        const isFreeSpread = spread === "single_card" || spread === "three_card";
+      // ── Tarot (auth disabled for testing) ─
+      if (path === "/tarot") return dispatch(await handleTarot(request, env));
 
-        if (isFreeSpread) {
-          // Free spreads: no auth, but daily limit on three_card still applies
-          // For three_card without auth, we skip the daily limit (anonymous users)
-          const req = new Request(request.url, { method: request.method, headers: request.headers, body: bodyText });
-          return dispatch(await handleTarot(req, env));
-        }
+      // // ── Protected user routes ────────────────────────────────────────────
+      // if (path === "/user/me")      { const userId = await requireAuth(request, env); return dispatch(await handleGetMe(env, userId)); }
+      // if (path === "/user/credits") { const userId = await requireAuth(request, env); return dispatch(await handleGetCredits(env, userId)); }
 
-        // Paid spreads: require auth + credits
-        const userId = await requireAuth(request, env);
-        const gate = await gateCredits(path, body, userId, env.NATAL_ANALYSIS_KV, env.DB);
-        if (!gate.ok) return json({ error: gate.error, ...(gate.balance !== undefined && { balance: gate.balance }) }, gate.status);
-
-        const req = new Request(request.url, { method: request.method, headers: request.headers, body: bodyText });
-        return dispatch(await handleTarot(req, env));
-      }
-
-      // ── Protected user routes ────────────────────────────────────────────
-      if (path === "/user/me")      { const userId = await requireAuth(request, env); return dispatch(await handleGetMe(env, userId)); }
-      if (path === "/user/credits") { const userId = await requireAuth(request, env); return dispatch(await handleGetCredits(env, userId)); }
-
-      // ── Protected AI routes ──────────────────────────────────────────────
-      if (PROTECTED_AI_ROUTES.has(path)) {
-        const userId = await requireAuth(request, env);
-        const bodyText = await request.text();
-        const body = JSON.parse(bodyText);
-
-        const gate = await gateCredits(path, body, userId, env.NATAL_ANALYSIS_KV, env.DB);
-        if (!gate.ok) return json({ error: gate.error, ...(gate.balance !== undefined && { balance: gate.balance }) }, gate.status);
-
-        const req = new Request(request.url, { method: request.method, headers: request.headers, body: bodyText });
-
-        if (path === "/natal-analysis")     return dispatch(await handleNatalAnalysis(req, env));
-        if (path === "/natal-chat")         return dispatch(await handleNatalChat(req, env));
-        if (path === "/relationship-score") return dispatch(await handleRelationshipScore(req, env));
-        if (path === "/ai") {
-          // Inject userId for cache key
-          const enriched = new Request(request.url, {
-            method: request.method,
-            headers: request.headers,
-            body: JSON.stringify({ ...body, userId }),
-          });
-          return dispatch(await handleAI(enriched, env));
-        }
-      }
+      // ── AI routes (auth disabled for testing) ──────────────────────────
+      if (path === "/natal-chat")         return dispatch(await handleNatalChat(request, env));
+      if (path === "/relationship-score") return dispatch(await handleRelationshipScore(request, env));
+      if (path === "/ai")                 return dispatch(await handleAI(request, env));
 
       return json({ error: "Not found", path }, 404);
 
@@ -152,24 +118,24 @@ function dispatch(result) {
   });
 }
 
-async function requireAuth(request, env) {
-  const token = extractToken(request);
-  const userId = await validateSession(env.NATAL_ANALYSIS_KV, token);
-  if (!userId) throw { status: 401, message: "Unauthorized" };
-  return userId;
-}
+// async function requireAuth(request, env) {
+//   const token = extractToken(request);
+//   const userId = await validateSession(env.NATAL_ANALYSIS_KV, token);
+//   if (!userId) throw { status: 401, message: "Unauthorized" };
+//   return userId;
+// }
 
 async function monthlyTopUp(env) {
   const TIER_CREDITS = { premium: 60, premium_plus: 200 };
-  const { results } = await env.DB.prepare(
+  const { results } = await env.celestia_db.prepare(
     `SELECT user_id, tier FROM subscriptions WHERE status = 'active' AND current_period_end > ?`
   ).bind(Math.floor(Date.now() / 1000)).all();
 
   for (const sub of results) {
     const credits = TIER_CREDITS[sub.tier];
     if (!credits) continue;
-    await env.DB.prepare(`UPDATE credits SET balance = balance + ? WHERE user_id = ?`).bind(credits, sub.user_id).run();
-    await env.DB.prepare(`INSERT INTO credit_transactions (id, user_id, amount, action) VALUES (?, ?, ?, ?)`).bind(crypto.randomUUID(), sub.user_id, credits, "monthly_subscription_topup").run();
+    await env.celestia_db.prepare(`UPDATE credits SET balance = balance + ? WHERE user_id = ?`).bind(credits, sub.user_id).run();
+    await env.celestia_db.prepare(`INSERT INTO credit_transactions (id, user_id, amount, action) VALUES (?, ?, ?, ?)`).bind(crypto.randomUUID(), sub.user_id, credits, "monthly_subscription_topup").run();
   }
   console.log(`Monthly top-up complete for ${results.length} subscribers`);
 }

@@ -5,14 +5,14 @@ function generateId() {
   return crypto.randomUUID();
 }
 
-export async function createUser(db, { apple_user_id, google_user_id, email, name }) {
+export async function createUser(db, { apple_user_id, google_user_id, email, name, is_guest }) {
   const id = generateId();
   await db.prepare(`
-    INSERT INTO users (id, apple_user_id, google_user_id, email, name)
-    VALUES (?, ?, ?, ?, ?)
-  `).bind(id, apple_user_id || null, google_user_id || null, email || null, name || null).run();
+    INSERT INTO users (id, apple_user_id, google_user_id, email, name, is_guest)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(id, apple_user_id || null, google_user_id || null, email || null, name || null, is_guest ? 1 : 0).run();
 
-  return { id, apple_user_id, google_user_id, email, name };
+  return { id, apple_user_id, google_user_id, email, name, is_guest: is_guest ? 1 : 0 };
 }
 
 export async function findUserByAppleId(db, appleUserId) {
