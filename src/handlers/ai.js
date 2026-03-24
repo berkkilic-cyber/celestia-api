@@ -10,7 +10,7 @@ const CORS_HEADERS = {
 };
 
 function actionConfig(action) {
-	const base = { model: 'meta-llama/Llama-3.1-8b-instruct', max_output_tokens: 70, temperature: 0.85 };
+	const base = { model: 'llama-3.1-8b-instant', max_output_tokens: 70, temperature: 0.85 };
 	switch (action) {
 		case 'daily_cosmic_message':
 			return { ...base, max_output_tokens: 70, temperature: 0.9 };

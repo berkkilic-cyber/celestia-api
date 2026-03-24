@@ -3,7 +3,7 @@ import { callLlama } from '../lib/llama.js';
 import { buildChartFacts, formatSynastryAspects } from '../lib/chart.js';
 
 const VALID_RELATION_TYPES = ['romantic', 'family', 'friendship', 'business'];
-const CFG = { model: 'meta-llama/Llama-3.1-8b-instruct', max_output_tokens: 500, temperature: 0.7 };
+const CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 500, temperature: 0.7 };
 
 function buildCacheKey(person1, person2, relationType) {
 	const personStr = (p) => {
