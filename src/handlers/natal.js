@@ -7,7 +7,7 @@ import { pickLocale } from '../lib/locale.js';
 const BIRTH_FIELDS = ['year', 'month', 'day', 'hour', 'minute', 'tzOffsetMinutes', 'latitude', 'longitude'];
 const CHAT_SESSION_TTL = 86400; // 24 hours
 const CHAT_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1000, temperature: 0.8 };
-const ANALYSIS_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1200, temperature: 0.8 };
+const ANALYSIS_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 800, temperature: 0.7 };
 
 // ─── /natal ──────────────────────────────────────────────────────────────────
 
@@ -28,15 +28,46 @@ function buildAnalysisCacheKey(body, locale) {
 }
 
 function parseAnalysisJSON(text) {
-	let cleaned = text
-		.trim()
-		.replace(/^```(?:json)?\s*\n?/i, '')
-		.replace(/\n?```\s*$/i, '');
-	const parsed = JSON.parse(cleaned);
+	console.log('[NATAL-ANALYSIS-DEBUG] Raw response length:', text?.length);
+	console.log('[NATAL-ANALYSIS-DEBUG] First 500 chars:', text?.substring(0, 500));
+	console.log('[NATAL-ANALYSIS-DEBUG] Last 200 chars:', text?.substring(Math.max(0, text.length - 200)));
+
+	// Try to extract JSON from the response (handle text before/after JSON)
+	let jsonStr = text.trim();
+	
+	// Remove code blocks if present
+	jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+	
+	// Try to find JSON object in the text (in case there's extra text)
+	const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+	if (jsonMatch) {
+		jsonStr = jsonMatch[0];
+		console.log('[NATAL-ANALYSIS-DEBUG] Extracted JSON from text');
+	}
+
+	console.log('[NATAL-ANALYSIS-DEBUG] Attempting to parse:', jsonStr.substring(0, 200) + '...');
+
+	let parsed;
+	try {
+		parsed = JSON.parse(jsonStr);
+	} catch (parseErr) {
+		console.error('[NATAL-ANALYSIS-DEBUG] JSON parse failed:', parseErr.message);
+		throw new Error(`Invalid JSON: ${parseErr.message}`);
+	}
+
+	console.log('[NATAL-ANALYSIS-DEBUG] Parsed successfully. Keys:', Object.keys(parsed));
+
 	const KEYS = ['coreTheme', 'strengths', 'challenges', 'loveRelationships', 'careerPurpose', 'spiritualPath'];
 	for (const k of KEYS) {
-		if (typeof parsed[k] !== 'string' || !parsed[k].trim()) throw new Error(`Missing or empty key: ${k}`);
+		const value = parsed[k];
+		console.log(`[NATAL-ANALYSIS-DEBUG] Checking key "${k}": type=${typeof value}, length=${value?.length}, empty=${!value?.trim?.()}`);
+		if (typeof value !== 'string' || !value.trim()) {
+			console.error(`[NATAL-ANALYSIS-DEBUG] MISSING OR EMPTY KEY: ${k} (value: "${value}")`);
+			throw new Error(`Missing or empty key: ${k}`);
+		}
 	}
+	
+	console.log('[NATAL-ANALYSIS-DEBUG] All keys validated successfully');
 	return Object.fromEntries(KEYS.map((k) => [k, parsed[k]]));
 }
 
@@ -59,42 +90,60 @@ export async function handleNatalAnalysis(request, env) {
 	const chartFacts = buildChartFacts(chart);
 	if (!chartFacts) return { error: 'Failed to compute chart facts', status: 500 };
 
+	const langInstruction = {
+		'tr-TR': 'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ). Use a warm, intimate Turkish phrases that feel personal and grounded. Honor the depth of Turkish astrological tradition.',
+		'de-DE': 'Write entirely in German with precise, grounded language. German astrology values clarity and thoughtfulness—be specific and substantive. Use "du" form to speak directly and warmly to the person.',
+		'fr-FR': 'Write entirely in French with elegance and poetic warmth. French astrology values nuance and connection—weave in personal resonance. Speak directly with "tu" form, maintaining intimacy.',
+		'en': 'Write entirely in English. Use warm, accessible language that feels conversational yet wise. Speak directly with "you," creating a tone of intimate guidance.',
+	}[locale] || 'Write entirely in English. Use warm, accessible language that feels conversational yet wise. Speak directly with "you," creating a tone of intimate guidance.';
+
 	const system = [
-		'You are an expert astrologer writing deeply personal natal chart analyses.',
-		"Your words feel like a warm hand on someone's shoulder—illuminating, not judging.",
-		'Help them see themselves through the lens of their chart with loving clarity.',
-		`Language/locale: ${locale}`,
-		'Tone: intimate, wise, encouraging. No disclaimers or apologies for astrology.',
+		'You are a warm astrologer writing personal natal chart analysis.',
+		"Speak directly to the person. Your tone is intimate and encouraging.",
+		langInstruction,
+		'Respond ONLY with valid JSON—no extra text, no explanation, no markdown.',
 	].join('\n');
 
 	const user = [
-		'Chart facts:',
+		'RESPOND WITH ONLY VALID JSON. NO OTHER TEXT.',
+		'',
+		'{',
+		'  "coreTheme": "Their central life purpose (50-60 words)",',
+		'  "strengths": "Natural talents and gifts (50-60 words)",',
+		'  "challenges": "Growth edges presented as evolution (50-60 words)",',
+		'  "loveRelationships": "Love patterns and needs (50-60 words)",',
+		'  "careerPurpose": "Vocational calling (50-60 words)",',
+		'  "spiritualPath": "Spiritual potential (50-60 words)"',
+		'}',
+		'',
+		'Chart data:',
 		chartFacts,
 		'',
-		'Write a detailed, personal natal analysis as valid JSON with EXACTLY these 6 keys (each ~80 words):',
-		'- "coreTheme": their soul\'s central narrative, life purpose, and core gifts',
-		'- "strengths": natural talents, harmonious placements, what comes easily to them',
-		'- "challenges": growth edges, tensions, and how to work with them wisely',
-		'- "loveRelationships": how they love, vulnerability patterns, what they seek in partnership',
-		'- "careerPurpose": their vocational calling, work strengths, path to fulfillment',
-		'- "spiritualPath": their spiritual gifts, inner growth potential, connection to something greater',
-		'',
-		'Guidelines:',
-		'- Speak directly to them ("your Venus...", "your North Node...")',
-		'- Ground everything in actual chart placements',
-		'- Frame challenges as evolution, not problems',
-		'- Be specific and personal—this is THEIR story',
-		'- Return ONLY valid JSON. No markdown.',
+		'Rules: Speak directly using "your". Ground in chart placements. Personal tone. Warm voice.',
 	].join('\n');
 
 	const out = await callLlama(env, ANALYSIS_CFG, system, user);
-	if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
+	
+	console.log('[NATAL-ANALYSIS] API Response:', {
+		error: out?.error,
+		hasText: !!out?.text,
+		textLength: out?.text?.length,
+		first300: out?.text?.substring(0, 300),
+		last100: out?.text?.substring(Math.max(0, out?.text?.length - 100)),
+	});
+
+	if (out?.error) {
+		console.error('[NATAL-ANALYSIS] API Error:', out.error);
+		return { error: out.error, details: out.raw, status: out.status || 500 };
+	}
 
 	let analysis;
 	try {
 		analysis = parseAnalysisJSON(out.text);
+		console.log('[NATAL-ANALYSIS] ✓ Successfully parsed all keys');
 	} catch (e) {
-		return { error: 'Failed to parse AI response', detail: e.message, status: 502 };
+		console.error('[NATAL-ANALYSIS] ✗ Parse failed:', e.message);
+		return { error: 'Failed to parse AI response', detail: e.message, fullOutput: out.text, status: 502 };
 	}
 
 	// Cache permanently (birth chart doesn't change)
@@ -108,6 +157,13 @@ export async function handleNatalAnalysis(request, env) {
 // ─── /natal-chat ─────────────────────────────────────────────────────────────
 
 function buildChatSystemPrompt(chartFacts, locale) {
+	const langInstruction = {
+		'tr-TR': 'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ). Use warm, intimate Turkish language that honors the spiritual depth. Speak with the familiarity and care of someone who truly knows them.',
+		'de-DE': 'Write entirely in German with precision and thoughtful clarity. German astrology values substantive insight—be specific and grounded. Use "du" to create warmth and directness.',
+		'fr-FR': 'Write entirely in French with poetic elegance and personal warmth. French astrology values nuance and soul connection—incorporate this into your language. Use "tu" form for intimacy.',
+		'en': 'Write entirely in English with conversational warmth and wisdom. Speak directly with "you," creating a tone of intimate mentorship.',
+	}[locale] || 'Write entirely in English with conversational warmth and wisdom. Speak directly with "you," creating a tone of intimate mentorship.';
+
 	return [
 		'You are a warm, wise astrologer in a deep conversation with someone you care about.',
 		'You know their natal chart intimately and speak to their authentic self.',
@@ -116,7 +172,7 @@ function buildChatSystemPrompt(chartFacts, locale) {
 		'Their natal chart:',
 		chartFacts,
 		'',
-		`Language/locale: ${locale}`,
+		langInstruction,
 		'',
 		'Guidelines for your voice:',
 		'- Deeply personal and compassionate, like a trusted mentor',

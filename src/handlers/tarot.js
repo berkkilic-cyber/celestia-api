@@ -91,10 +91,15 @@ export async function handleTarot(request, env) {
 	const locale = pickLocale(lang);
 	const langInstruction =
 		{
-			'tr-TR': 'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ).',
-			'de-DE': 'Write entirely in German.',
-			'fr-FR': 'Write entirely in French.',
-		}[locale] || 'Write entirely in English.';
+			'tr-TR':
+				'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ). Use warm, intimate Turkish language that honors the spiritual depth. Speak with the familiarity and care of someone who truly knows them.',
+			'de-DE':
+				'Write entirely in German with precision and thoughtful clarity. German astrology values substantive insight—be specific and grounded. Use "du" to create warmth and directness.',
+			'fr-FR':
+				'Write entirely in French with poetic elegance and personal warmth. French astrology values nuance and soul connection—incorporate this into your language. Use "tu" form for intimacy.',
+			en: 'Write entirely in English with conversational warmth and wisdom. Speak directly with "you," creating a tone of intimate mentorship.',
+		}[locale] ||
+		'Write entirely in English with conversational warmth and wisdom. Speak directly with "you," creating a tone of intimate mentorship.';
 
 	const system = [
 		'You are a wise, compassionate tarot reader creating deeply personal, meaningful readings.',
