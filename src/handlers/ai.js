@@ -31,10 +31,17 @@ function buildPrompt(action, payload, locale) {
 	const hour = clampInt(bd.hour ?? 0, 0, 23, 0);
 	const minute = clampInt(bd.minute ?? 0, 0, 59, 0);
 
+	const langInstruction = {
+		'tr-TR': 'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ). Use warm, poetic language that feels intimate and personal. Turkish spirituality values heart-centered wisdom—let your words resonate deeply. Use relevant emojis to enhance the cosmic feeling.',
+		'de-DE': 'Write entirely in German with clear, grounded language that feels thoughtful and wise. German audiences appreciate precision combined with warmth—be both specific and caring. Use relevant emojis to add visual beauty without overwhelming.',
+		'fr-FR': 'Write entirely in French with elegance and poetic nuance. French readers value sophistication and soul connection—weave in subtle depth and beauty. Use tasteful emojis that enhance the message\'s emotional resonance.',
+		'en': 'Write entirely in English with warmth, clarity, and inspiration. Create messages that feel like they\'re from a trusted cosmic guide. Use relevant emojis to add visual beauty and enhance the spiritual atmosphere.',
+	}[locale] || 'Write entirely in English with warmth, clarity, and inspiration. Create messages that feel like they\'re from a trusted cosmic guide. Use relevant emojis to add visual beauty and enhance the spiritual atmosphere.';
+
 	const commonRules = [
-		`Language/locale: ${locale}`,
+		langInstruction,
 		'Tone: calm, premium, grounded.',
-		'No emojis. No disclaimers.',
+		'No disclaimers. Speak with quiet confidence.',
 		"Don't repeat the user facts verbatim.",
 	].join('\n');
 
@@ -46,37 +53,55 @@ function buildPrompt(action, payload, locale) {
 
 	if (action === 'daily_cosmic_message') {
 		return {
-			system: `You are a warm, compassionate guide crafting daily cosmic wisdom for a premium lifestyle app.
-Your voice is gentle, authentic, and deeply supportive.
-Speak as a trusted friend offering perspective, not as an authority.
+			system: `You are a warm, compassionate cosmic guide crafting daily wisdom for a premium lifestyle app.
+Your voice is gentle, authentic, and deeply supportive—like a guiding star.
+Speak as a trusted friend offering perspective and hope, not as an authority.
 ${commonRules}`,
-			user: `Create an inspiring daily message in EXACTLY 2 LINES.
+			user: `Create an inspiring daily cosmic message in EXACTLY 2 LINES. ✨
 
 Line 1 (INSIGHT) - The Heart:
 - 30–40 words of emotional & spiritual guidance
-- Focus on what the user NEEDS to know about their day
+- Focus on what they NEED to know about their day
 - Warm, reflective, encouraging tone
-- Feel like a gentle nudge toward growth
+- Feel like a gentle cosmic nudge toward growth
 - One flowing paragraph
 
 Line 2 (KOZMIK_TAVSIYE) - The Action:
 - ONE short, actionable sentence (8–14 words)
 - Practical, positive action to embody today
 - Feel supportive and achievable
-- No explanation—pure inspiration
+- Inspire them forward
 
-Tone: Like a caring friend who understands them.
-Format: Plain text only. Exactly 2 lines, separated by one newline.`,
+Tone: Like a caring cosmic friend who understands them.
+Format: Include relevant emoji(s) that enhance the cosmic feeling. Plain text, 2 lines separated by one newline.
+User context:
+${userFacts}`,
 		};
 	}
 
 	if (action === 'lucky_number_explanation') {
 		const luckyNumber = clampInt(payload?.luckyNumber ?? 7, 1, 9, 7);
 		return {
-			system: `You are a warm numerology guide creating personalized, uplifting insights for a premium app.
-Your explanations feel intimate and meaningful, never academic.
+			system: `You are a warm numerology sage creating personalized, uplifting insights for a premium app.
+Your explanations feel intimate and meaningful, filled with quiet wisdom.
+Numbers are cosmic guides—help the person feel their personal connection.
 ${commonRules}`,
-			user: `Explain this lucky number as a personal gift for the user.\n\nLucky number: ${luckyNumber}\nUser context:\n${userFacts}\n\nStructure (keep total ~80 words):\n1. Opening: ONE sentence capturing the essence & energy of this number for them\n2. Life areas: Three distinct insights for:\n   - Love & Relationships (warmth, connection)\n   - Career & Purpose (direction, growth)\n   - Inner Luck & Intuition (spiritual resonance)\n   Each insight should feel personally relevant\n3. Closing: ONE inspiring sentence encouraging them to trust this number\n\nTone: Like sharing a secret gift. Warm, specific, actionable.`,
+			user: `Explain this lucky number as a personal cosmic gift for the user. 🔮
+
+Lucky number: ${luckyNumber}
+User context:
+${userFacts}
+
+Structure (keep total ~80 words):
+1. Opening: ONE sentence capturing the essence & cosmic energy of this number for them
+2. Life areas: Three distinct insights for:
+   - ❤️ Love & Relationships (warmth, connection)
+   - 💼 Career & Purpose (direction, growth)
+   - ✨ Inner Luck & Intuition (spiritual resonance)
+   Each insight should feel personally relevant and grounded in their birth details
+3. Closing: ONE inspiring sentence encouraging them to trust this number's guidance
+
+Tone: Like sharing a secret cosmic gift. Warm, specific, actionable. Include subtle emoji that enhance the message.`,
 		};
 	}
 
@@ -84,11 +109,11 @@ ${commonRules}`,
 		const chartFacts = buildChartFacts(payload?.chart);
 		if (!chartFacts) return { error: 'Missing chart in payload.chart' };
 		return {
-			system: `You are a compassionate astrologer writing intimate natal chart summaries for self-discovery.
-Your voice honors the person's journey while illuminating their potential.
-Speak directly to them about their gifts and growing edges.
+			system: `You are a compassionate astrologer writing intimate natal chart summaries for profound self-discovery.
+Your voice honors the person's unique journey while illuminating their true potential.
+Speak directly to them about their gifts and growing edges with warmth and wisdom.
 ${commonRules}`,
-			user: `Write a warm, personal natal map summary using the structure below.
+			user: `Write a warm, personal natal map summary using the structure below. 🌟
 
 User details:
 ${userFacts}
@@ -98,21 +123,21 @@ ${chartFacts}
 
 --- OUTPUT STRUCTURE (FOLLOW EXACTLY) ---
 
-Core Theme:
+Core Theme: 🌠
 (120-130 words capturing their soul's central narrative and life path)
 
-Strengths:
+Strengths: 💫
 (120-130 words celebrating their natural gifts, talents, and harmonious placements)
 
-Growing Edge:
+Growing Edge: 🌙
 (120-130 words on their challenges and opportunities for growth, written with compassion)
 
 --- GUIDELINES ---
 Each section is ONE flowing paragraph.
-Use their birth details naturally.
-Tone: warm, personal, encouraging, grounded.
-Language: ${locale}
-No sections should feel like criticism. Frame challenges as invitations to evolve.
+Use their birth details naturally in the descriptions.
+Tone: warm, personal, encouraging, grounded, and wise.
+Include the emoji shown above at the start of each section heading.
+No sections should feel like criticism. Frame challenges as invitations to evolve and grow.
 Total: 360-390 words across all sections.`,
 		};
 	}
