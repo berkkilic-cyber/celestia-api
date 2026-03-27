@@ -5,7 +5,8 @@ import { computeComposite } from "./natal-core.js";
 import { validateSession, extractToken } from "./auth/session.js";
 import { gateCredits } from "./middleware/credits.js";
 
-import { handleNatal, handleNatalAnalysis, handleNatalChat } from "./handlers/natal.js";
+import { handleNatal, handleNatalAnalysis, handleNatalChat, buildAnalysisCacheKey } from "./handlers/natal.js";
+import { pickLocale } from "./lib/locale.js";
 import { handleTarot } from "./handlers/tarot.js";
 import { handleRelationshipScore, handleRelationshipChat } from "./handlers/relationship.js";
 import { handleAI } from "./handlers/ai.js";
@@ -28,7 +29,6 @@ function json(data, status = 200) {
 
 // Routes that require auth + credit gating
 const PROTECTED_ROUTES = new Set([
-  "/natal-analysis",
   "/tarot",
   "/natal-chat",
   "/relationship-score",
@@ -77,6 +77,29 @@ export default {
       if (path === "/user/me")      { const userId = await requireAuth(request, env); return dispatch(await handleGetMe(env, userId)); }
       if (path === "/user/credits") { const userId = await requireAuth(request, env); return dispatch(await handleGetCredits(env, userId)); }
 
+      // ── Natal analysis (cache-first, only charge on miss) ─────────────────
+      if (path === "/natal-analysis") {
+        const userId = await requireAuth(request, env);
+        const cloned = request.clone();
+        const body = await cloned.json();
+        const locale = pickLocale(body.lang);
+        const cacheKey = buildAnalysisCacheKey(body, locale);
+
+        try {
+          const cached = await env.NATAL_ANALYSIS_KV.get(cacheKey, 'json');
+          if (cached) return json(cached);
+        } catch (_) {}
+
+        const gate = await gateCredits(path, body, userId, env.NATAL_ANALYSIS_KV, env.celestia_db);
+        if (!gate.ok) return json({ error: gate.error, balance: gate.balance }, gate.status);
+
+        const handlerResult = await handleNatalAnalysis(request, env);
+        const res = dispatch(handlerResult);
+        if (gate.balance !== undefined) res.headers.set("X-Credits-Balance", String(gate.balance));
+        if (gate.cost !== undefined)    res.headers.set("X-Credits-Cost", String(gate.cost));
+        return res;
+      }
+
       // ── Protected routes (auth + credit gating) ──────────────────────────
       if (PROTECTED_ROUTES.has(path)) {
         const userId = await requireAuth(request, env);
@@ -86,8 +109,7 @@ export default {
         if (!gate.ok) return json({ error: gate.error, balance: gate.balance }, gate.status);
 
         let handlerResult;
-        if (path === "/natal-analysis")     handlerResult = await handleNatalAnalysis(request, env);
-        else if (path === "/tarot")         handlerResult = await handleTarot(request, env);
+        if (path === "/tarot")              handlerResult = await handleTarot(request, env);
         else if (path === "/natal-chat")    handlerResult = await handleNatalChat(request, env);
         else if (path === "/relationship-score") handlerResult = await handleRelationshipScore(request, env);
         else if (path === "/relationship-chat") handlerResult = await handleRelationshipChat(request, env);

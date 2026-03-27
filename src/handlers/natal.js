@@ -20,7 +20,7 @@ export async function handleNatal(request) {
 
 // ─── /natal-analysis ─────────────────────────────────────────────────────────
 
-function buildAnalysisCacheKey(body, locale) {
+export function buildAnalysisCacheKey(body, locale) {
 	const lat = Number(body.latitude).toFixed(4);
 	const lon = Number(body.longitude).toFixed(4);
 	return `natal-analysis:${body.year}-${body.month}-${body.day}-${body.hour}-${body.minute}-${body.tzOffsetMinutes}-${lat}-${lon}:${locale}`;
