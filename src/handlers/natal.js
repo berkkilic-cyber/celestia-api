@@ -92,14 +92,14 @@ export async function handleNatalAnalysis(request, env) {
 	const langInstruction =
 		{
 			'tr-TR':
-				'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ). Use a warm, intimate Turkish phrases that feel personal and grounded. Honor the depth of Turkish astrological tradition.',
+				'Write ENTIRELY in Turkish with CORRECT Turkish characters ALWAYS (ç, ş, ğ, ı, ö, ü, İ). Never use c instead of ç, s instead of ş, g instead of ğ, etc. Check spelling carefully. Use warm, intimate Turkish language that honors spiritual depth. Speak with familiarity and care. Use "sen" for directness',
 			'de-DE':
-				'Write entirely in German with precise, grounded language. German astrology values clarity and thoughtfulness—be specific and substantive. Use "du" form to speak directly and warmly to the person.',
+				'Write ENTIRELY in German with correct spelling and grammar. German values precision and substantive insight—be specific, grounded, and accurate. Use "du" form for warmth and directness. Proofread for accurate spelling.',
 			'fr-FR':
-				'Write entirely in French with elegance and poetic warmth. French astrology values nuance and connection—weave in personal resonance. Speak directly with "tu" form, maintaining intimacy.',
-			en: 'Write entirely in English. Use warm, accessible language that feels conversational yet wise. Speak directly with "you," creating a tone of intimate guidance.',
+				'Write ENTIRELY in French with elegant, poetic language and correct spelling. French values nuance and soul connection—incorporate this with linguistic precision. Use "tu" form for intimacy. Ensure all accents (é, è, ê, à, ù, etc.) are correct.',
+			en: 'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.',
 		}[locale] ||
-		'Write entirely in English. Use warm, accessible language that feels conversational yet wise. Speak directly with "you," creating a tone of intimate guidance.';
+		'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.';
 
 	const system = [
 		'You are a warm astrologer writing personal natal chart analysis.',
