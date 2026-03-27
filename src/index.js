@@ -2,20 +2,21 @@
 // ── Router only. No business logic here. ──────────────────────────────────────
 
 import { computeComposite } from "./natal-core.js";
-// import { validateSession, extractToken } from "./auth/session.js";
-// import { gateCredits } from "./middleware/credits.js";
+import { validateSession, extractToken } from "./auth/session.js";
+import { gateCredits } from "./middleware/credits.js";
 
 import { handleNatal, handleNatalAnalysis, handleNatalChat } from "./handlers/natal.js";
 import { handleTarot } from "./handlers/tarot.js";
 import { handleRelationshipScore } from "./handlers/relationship.js";
 import { handleAI } from "./handlers/ai.js";
-// import { handleAppleAuth, handleGoogleAuth, handleGuestAuth, handleLogout, handleGetMe, handleGetCredits } from "./handlers/auth.js";
+import { handleAppleAuth, handleGoogleAuth, handleGuestAuth, handleLogout, handleGetMe, handleGetCredits } from "./handlers/auth.js";
 import { handlePlacesAutocomplete, handlePlacesDetails } from "./handlers/places.js";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Expose-Headers": "X-Credits-Balance, X-Credits-Cost",
 };
 
 function json(data, status = 200) {
@@ -25,12 +26,14 @@ function json(data, status = 200) {
   });
 }
 
-// // Routes that require auth + credit gating
-// const PROTECTED_AI_ROUTES = new Set([
-//   "/natal-chat",
-//   "/relationship-score",
-//   "/ai",
-// ]);
+// Routes that require auth + credit gating
+const PROTECTED_ROUTES = new Set([
+  "/natal-analysis",
+  "/tarot",
+  "/natal-chat",
+  "/relationship-score",
+  "/ai",
+]);
 
 export default {
   async fetch(request, env) {
@@ -47,19 +50,18 @@ export default {
       // ── Health ───────────────────────────────────────────────────────────
       if (path === "/health") return json({ status: "ok" });
 
-      // // ── Public auth routes ───────────────────────────────────────────────
-      // if (path === "/auth/apple")  return dispatch(await handleAppleAuth(request, env));
-      // if (path === "/auth/google") return dispatch(await handleGoogleAuth(request, env));
-      // if (path === "/auth/guest" && request.method === "POST") return dispatch(await handleGuestAuth(env));
-      // if (path === "/auth/logout") return dispatch(await handleLogout(request, env));
+      // ── Public auth routes ───────────────────────────────────────────────
+      if (path === "/auth/apple")  return dispatch(await handleAppleAuth(request, env));
+      if (path === "/auth/google") return dispatch(await handleGoogleAuth(request, env));
+      if (path === "/auth/guest" && request.method === "POST") return dispatch(await handleGuestAuth(env));
+      if (path === "/auth/logout") return dispatch(await handleLogout(request, env));
 
       // ── Google Places (public) ─────────────────────────────────────────
       if (path === "/places/autocomplete") return dispatch(await handlePlacesAutocomplete(request, env));
       if (path === "/places/details")      return dispatch(await handlePlacesDetails(request, env));
 
       // ── Fully public compute routes (no AI, no cost) ─────────────────────
-      if (path === "/natal")          return dispatch(await handleNatal(request));
-      if (path === "/natal-analysis") return dispatch(await handleNatalAnalysis(request, env));
+      if (path === "/natal") return dispatch(await handleNatal(request));
       if (path === "/composite") {
         const body = await request.json();
         const needed = ["year","month","day","hour","minute","tzOffsetMinutes","latitude","longitude"];
@@ -70,17 +72,30 @@ export default {
         return json(computeComposite(body.person1, body.person2));
       }
 
-      // ── Tarot (auth disabled for testing) ─
-      if (path === "/tarot") return dispatch(await handleTarot(request, env));
+      // ── Protected user routes ────────────────────────────────────────────
+      if (path === "/user/me")      { const userId = await requireAuth(request, env); return dispatch(await handleGetMe(env, userId)); }
+      if (path === "/user/credits") { const userId = await requireAuth(request, env); return dispatch(await handleGetCredits(env, userId)); }
 
-      // // ── Protected user routes ────────────────────────────────────────────
-      // if (path === "/user/me")      { const userId = await requireAuth(request, env); return dispatch(await handleGetMe(env, userId)); }
-      // if (path === "/user/credits") { const userId = await requireAuth(request, env); return dispatch(await handleGetCredits(env, userId)); }
+      // ── Protected routes (auth + credit gating) ──────────────────────────
+      if (PROTECTED_ROUTES.has(path)) {
+        const userId = await requireAuth(request, env);
+        const cloned = request.clone();
+        const body = await cloned.json();
+        const gate = await gateCredits(path, body, userId, env.NATAL_ANALYSIS_KV, env.celestia_db);
+        if (!gate.ok) return json({ error: gate.error, balance: gate.balance }, gate.status);
 
-      // ── AI routes (auth disabled for testing) ──────────────────────────
-      if (path === "/natal-chat")         return dispatch(await handleNatalChat(request, env));
-      if (path === "/relationship-score") return dispatch(await handleRelationshipScore(request, env));
-      if (path === "/ai")                 return dispatch(await handleAI(request, env));
+        let handlerResult;
+        if (path === "/natal-analysis")     handlerResult = await handleNatalAnalysis(request, env);
+        else if (path === "/tarot")         handlerResult = await handleTarot(request, env);
+        else if (path === "/natal-chat")    handlerResult = await handleNatalChat(request, env);
+        else if (path === "/relationship-score") handlerResult = await handleRelationshipScore(request, env);
+        else if (path === "/ai")            handlerResult = await handleAI(request, env);
+
+        const res = dispatch(handlerResult);
+        if (gate.balance !== undefined) res.headers.set("X-Credits-Balance", String(gate.balance));
+        if (gate.cost !== undefined)    res.headers.set("X-Credits-Cost", String(gate.cost));
+        return res;
+      }
 
       return json({ error: "Not found", path }, 404);
 
@@ -118,12 +133,12 @@ function dispatch(result) {
   });
 }
 
-// async function requireAuth(request, env) {
-//   const token = extractToken(request);
-//   const userId = await validateSession(env.NATAL_ANALYSIS_KV, token);
-//   if (!userId) throw { status: 401, message: "Unauthorized" };
-//   return userId;
-// }
+async function requireAuth(request, env) {
+  const token = extractToken(request);
+  const userId = await validateSession(env.NATAL_ANALYSIS_KV, token);
+  if (!userId) throw { status: 401, message: "Unauthorized" };
+  return userId;
+}
 
 async function monthlyTopUp(env) {
   const TIER_CREDITS = { premium: 60, premium_plus: 200 };
