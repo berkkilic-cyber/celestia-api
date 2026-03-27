@@ -18,7 +18,10 @@ export function resolveAction(pathname, body) {
   if (pathname === "/relationship-score") return "compatibility";
   if (pathname === "/relationship-chat")  return "ai_qa";
   if (pathname === "/natal-analysis")     return "natal_interpretation";
-  if (pathname === "/ai")                 return "ai_qa";
+  if (pathname === "/ai") {
+    if (body?.action === "daily_cosmic_message") return "daily_cosmic_message";
+    return "ai_qa";
+  }
   return null;
 }
 

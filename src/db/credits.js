@@ -15,6 +15,7 @@ export const ACTION_COSTS = {
   transit_forecast: 2,
   natal_interpretation: 3,
   // Free actions — not consumed
+  daily_cosmic_message: 0,
   tarot_single: 0,
   tarot_daily_3card: 0,
   natal_chart: 0,
