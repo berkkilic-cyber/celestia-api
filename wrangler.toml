@@ -1,3 +1,4 @@
+# AdMob SSV callback: https://celestia-api.berk-kilic.workers.dev/api/ads/rewarded-callback
 name = "celestia-api"
 main = "src/index.js"
 compatibility_date = "2024-01-01"

@@ -12,6 +12,7 @@ import { handleRelationshipScore, handleRelationshipChat } from './handlers/rela
 import { handleAI } from './handlers/ai.js';
 import { handleAppleAuth, handleGoogleAuth, handleGuestAuth, handleLogout, handleGetMe, handleGetCredits } from './handlers/auth.js';
 import { handlePlacesAutocomplete, handlePlacesDetails } from './handlers/places.js';
+import { handleRewardedCallback } from './handlers/ads.js';
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
@@ -49,6 +50,10 @@ export default {
 			if (path === '/auth/google') return dispatch(await handleGoogleAuth(request, env));
 			if (path === '/auth/guest' && request.method === 'POST') return dispatch(await handleGuestAuth(env));
 			if (path === '/auth/logout') return dispatch(await handleLogout(request, env));
+
+			// ── AdMob SSV callback (called by Google, no auth) ─────────────────
+			// AdMob SSV callback: https://celestia-api.berk-kilic.workers.dev/api/ads/rewarded-callback
+			if (path === '/api/ads/rewarded-callback') return dispatch(await handleRewardedCallback(request, env));
 
 			// ── Google Places (public) ─────────────────────────────────────────
 			if (path === '/places/autocomplete') return dispatch(await handlePlacesAutocomplete(request, env));
