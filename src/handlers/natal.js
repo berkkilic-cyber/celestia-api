@@ -1,11 +1,10 @@
 // src/handlers/natal.js
 import { computeNatal } from '../natal-core.js';
 import { buildChartFacts } from '../lib/chart.js';
-import { callLlama, callLlamaChat } from '../lib/llama.js';
+import { callLlama } from '../lib/llama.js';
 import { pickLocale } from '../lib/locale.js';
 
 const BIRTH_FIELDS = ['year', 'month', 'day', 'hour', 'minute', 'tzOffsetMinutes', 'latitude', 'longitude'];
-const CHAT_SESSION_TTL = 86400; // 24 hours
 const CHAT_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1000, temperature: 0.8 };
 const ANALYSIS_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 800, temperature: 0.7 };
 
@@ -189,61 +188,19 @@ function buildChatSystemPrompt(chartFacts, locale) {
 export async function handleNatalChat(request, env) {
 	const body = await request.json();
 
-	// ── Continue existing session ──────────────────────────────────────────────
-	if (body.sessionId) {
-		const message = body.message;
-		if (!message?.trim()) return { error: 'Missing or empty message', status: 400 };
-		if (message.length > 2000) return { error: 'Message too long (max 2000 characters)', status: 400 };
+	const message = body.message;
+	if (!message?.trim()) return { error: 'Missing or empty message', status: 400 };
+	if (message.length > 2000) return { error: 'Message too long (max 2000 characters)', status: 400 };
+	if (!body.chart) return { error: 'Missing: chart', status: 400 };
 
-		const kvKey = `chat:${body.sessionId}`;
-		let session;
-		try {
-			session = await env.NATAL_ANALYSIS_KV.get(kvKey, 'json');
-		} catch (_) {}
-		if (!session) return { error: 'Session not found or expired', status: 404 };
-
-		const out = await callLlamaChat(env, CHAT_CFG, [session.messages[0], { role: 'user', content: message.trim() }]);
-		if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
-
-		session.turnCount = (session.turnCount || 0) + 1;
-		try {
-			await env.NATAL_ANALYSIS_KV.put(kvKey, JSON.stringify(session), { expirationTtl: CHAT_SESSION_TTL });
-		} catch (_) {}
-
-		return { data: { sessionId: body.sessionId, reply: out.text, turnCount: session.turnCount } };
-	}
-
-	// ── New session ────────────────────────────────────────────────────────────
-	for (const k of BIRTH_FIELDS) {
-		if (body[k] === undefined) return { error: `Missing: ${k}`, status: 400 };
-	}
-
-	const chart = computeNatal(body);
-	const chartFacts = buildChartFacts(chart);
-	if (!chartFacts) return { error: 'Failed to compute chart facts', status: 500 };
+	const chartFacts = buildChartFacts(body.chart);
+	if (!chartFacts) return { error: 'Invalid chart object', status: 400 };
 
 	const locale = pickLocale(body.lang);
 	const systemPrompt = buildChatSystemPrompt(chartFacts, locale);
-	const sessionId = crypto.randomUUID();
-	const messages = [{ role: 'system', content: systemPrompt }];
 
-	let reply,
-		turnCount = 0;
+	const out = await callLlama(env, CHAT_CFG, systemPrompt, message.trim());
+	if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
 
-	if (body.message?.trim()) {
-		if (body.message.length > 2000) return { error: 'Message too long (max 2000 characters)', status: 400 };
-		const out = await callLlamaChat(env, CHAT_CFG, [messages[0], { role: 'user', content: body.message.trim() }]);
-		if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
-		reply = out.text;
-		turnCount = 1;
-	}
-
-	const session = { locale, createdAt: new Date().toISOString(), turnCount, messages };
-	try {
-		await env.NATAL_ANALYSIS_KV.put(`chat:${sessionId}`, JSON.stringify(session), { expirationTtl: CHAT_SESSION_TTL });
-	} catch (_) {}
-
-	const result = { sessionId, turnCount };
-	if (reply !== undefined) result.reply = reply;
-	return { data: result };
+	return { data: { reply: out.text } };
 }

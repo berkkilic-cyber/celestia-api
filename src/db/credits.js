@@ -11,7 +11,7 @@ export const ACTION_COSTS = {
   tarot_career: 2,
   tarot_celtic: 4,
   ai_qa: 1,
-  compatibility: 2,
+  compatibility: 0,
   transit_forecast: 2,
   natal_interpretation: 3,
   // Free actions — not consumed
