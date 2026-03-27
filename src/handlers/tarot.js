@@ -39,25 +39,66 @@ function formatCards(cards, spreadType) {
 }
 
 function parseResponse(text) {
+	console.log('[TAROT-DEBUG] Raw response length:', text?.length);
+	console.log('[TAROT-DEBUG] First 400 chars:', text?.substring(0, 400));
+
 	let cleaned = text
 		.trim()
 		.replace(/^```(?:json)?\s*\n?/i, '')
 		.replace(/\n?```\s*$/i, '');
-	const parsed = JSON.parse(cleaned);
 
-	if (typeof parsed.reading !== 'string' || !parsed.reading.trim()) throw new Error('reading must be a non-empty string');
-	if (typeof parsed.summary !== 'string' || !parsed.summary.trim()) throw new Error('summary must be a non-empty string');
-	if (!Array.isArray(parsed.cards)) throw new Error('cards must be an array');
-
-	for (const card of parsed.cards) {
-		if (typeof card.name !== 'string' || !card.name.trim()) throw new Error('Each card must have a non-empty name');
-		if (typeof card.reversed !== 'boolean') throw new Error('Each card must have a boolean reversed field');
-		if (typeof card.positionLabel !== 'string' || !card.positionLabel.trim())
-			throw new Error('Each card must have a non-empty positionLabel');
-		if (typeof card.interpretation !== 'string' || !card.interpretation.trim())
-			throw new Error('Each card must have a non-empty interpretation');
+	// Try to extract JSON if there's extra text
+	const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+	if (jsonMatch) {
+		cleaned = jsonMatch[0];
+		console.log('[TAROT-DEBUG] Extracted JSON from text');
 	}
 
+	let parsed;
+	try {
+		parsed = JSON.parse(cleaned);
+	} catch (parseErr) {
+		console.error('[TAROT-DEBUG] JSON parse error:', parseErr.message);
+		throw new Error(`Invalid JSON: ${parseErr.message}`);
+	}
+
+	if (typeof parsed.reading !== 'string' || !parsed.reading.trim()) {
+		console.error('[TAROT-DEBUG] Missing or empty reading');
+		throw new Error('reading must be a non-empty string');
+	}
+	if (typeof parsed.summary !== 'string' || !parsed.summary.trim()) {
+		console.error('[TAROT-DEBUG] Missing or empty summary');
+		throw new Error('summary must be a non-empty string');
+	}
+	if (!Array.isArray(parsed.cards)) {
+		console.error('[TAROT-DEBUG] Cards is not an array');
+		throw new Error('cards must be an array');
+	}
+
+	for (let i = 0; i < parsed.cards.length; i++) {
+		const card = parsed.cards[i];
+		if (typeof card.name !== 'string' || !card.name.trim()) {
+			console.error(`[TAROT-DEBUG] Card ${i}: missing or empty name`);
+			throw new Error(`Card ${i}: name must be a non-empty string`);
+		}
+		if (typeof card.reversed !== 'boolean') {
+			console.error(`[TAROT-DEBUG] Card ${i}: reversed is not boolean`);
+			throw new Error(`Card ${i}: reversed must be boolean`);
+		}
+		if (typeof card.positionLabel !== 'string' || !card.positionLabel.trim()) {
+			console.error(`[TAROT-DEBUG] Card ${i}: missing or empty positionLabel`);
+			throw new Error(`Card ${i}: positionLabel must be non-empty`);
+		}
+		if (typeof card.interpretation !== 'string' || !card.interpretation.trim()) {
+			console.error(`[TAROT-DEBUG] Card ${i} (${card.name}): MISSING OR EMPTY INTERPRETATION`);
+			throw new Error(
+				`Card ${i} (${card.name}): interpretation is REQUIRED and must be non-empty. Every card must have a detailed explanation.`,
+			);
+		}
+		console.log(`[TAROT-DEBUG] Card ${i}: "${card.name}" ✓ has interpretation (${card.interpretation.length} chars)`);
+	}
+
+	console.log('[TAROT-DEBUG] ✓ All cards validated with interpretations');
 	return {
 		reading: parsed.reading,
 		summary: parsed.summary,
@@ -92,14 +133,14 @@ export async function handleTarot(request, env) {
 	const langInstruction =
 		{
 			'tr-TR':
-				'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ). Use warm, intimate Turkish language that honors the spiritual depth. Speak with the familiarity and care of someone who truly knows them.',
+				'Write ENTIRELY in Turkish with CORRECT Turkish characters ALWAYS (ç, ş, ğ, ı, ö, ü, İ). Never use c instead of ç, s instead of ş, g instead of ğ, etc. Check spelling carefully. Use warm, intimate Turkish language that honors spiritual depth. Speak with familiarity and care. Use "sen" for directness',
 			'de-DE':
-				'Write entirely in German with precision and thoughtful clarity. German astrology values substantive insight—be specific and grounded. Use "du" to create warmth and directness.',
+				'Write ENTIRELY in German with correct spelling and grammar. German values precision and substantive insight—be specific, grounded, and accurate. Use "du" form for warmth and directness. Proofread for accurate spelling.',
 			'fr-FR':
-				'Write entirely in French with poetic elegance and personal warmth. French astrology values nuance and soul connection—incorporate this into your language. Use "tu" form for intimacy.',
-			en: 'Write entirely in English with conversational warmth and wisdom. Speak directly with "you," creating a tone of intimate mentorship.',
+				'Write ENTIRELY in French with elegant, poetic language and correct spelling. French values nuance and soul connection—incorporate this with linguistic precision. Use "tu" form for intimacy. Ensure all accents (é, è, ê, à, ù, etc.) are correct.',
+			en: 'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.',
 		}[locale] ||
-		'Write entirely in English with conversational warmth and wisdom. Speak directly with "you," creating a tone of intimate mentorship.';
+		'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.';
 
 	const system = [
 		'You are a wise, compassionate tarot reader creating deeply personal, meaningful readings.',
@@ -114,6 +155,17 @@ export async function handleTarot(request, env) {
 		: '';
 
 	const user = [
+		'CRITICAL: Every card MUST have a detailed interpretation. No exceptions.',
+		'Return ONLY valid JSON with this exact structure, no markdown, no preamble:',
+		'',
+		'{',
+		'  "reading": "<250-300 word reading split into 2-3 short paragraphs separated by two newlines>",',
+		'  "summary": "<1-2 sentence summary of the overall message>",',
+		'  "cards": [',
+		'    { "name": "<card name>", "reversed": <bool>, "positionLabel": "<position label>", "interpretation": "<2-3 sentences of detailed explanation specific to this position>" }',
+		'  ]',
+		'}',
+		'',
 		`Spread type: ${spreadType}`,
 		`Tone: ${TONE_MAP[spreadType]}`,
 		'',
@@ -121,24 +173,36 @@ export async function handleTarot(request, env) {
 		formatCards(cards, spreadType),
 		questionLine,
 		'',
-		'Return ONLY valid JSON with this exact structure, no markdown, no preamble:',
-		'{',
-		'  "reading": "<250-300 word reading split into 2-3 short paragraphs separated by \\n\\n>",',
-		'  "summary": "<1-2 sentence summary of the overall message>",',
-		'  "cards": [',
-		'    { "name": "<card name>", "reversed": <bool>, "positionLabel": "<label>", "interpretation": "<2-3 sentences>" }',
-		'  ]',
-		'}',
-		`The cards array must have exactly ${expectedCount} element(s), matching positions: ${SPREAD_POSITIONS[spreadType].join(', ')}.`,
+		`The cards array MUST have exactly ${expectedCount} element(s) in this exact order: ${SPREAD_POSITIONS[spreadType].join(', ')}.`,
+		'EVERY card must have a non-empty interpretation field explaining its meaning in this position.',
+		'The interpretation should be specific to the card, position, and question (if any).',
 	].join('\n');
 
 	for (let attempt = 0; attempt < 2; attempt++) {
 		const out = await callLlama(env, CFG, system, user);
-		if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
+
+		console.log(`[TAROT] Attempt ${attempt + 1} - API Response:`, {
+			error: out?.error,
+			hasText: !!out?.text,
+			textLength: out?.text?.length,
+			first300: out?.text?.substring(0, 300),
+		});
+
+		if (out?.error) {
+			console.error('[TAROT] API Error:', out.error);
+			return { error: out.error, details: out.raw, status: out.status || 500 };
+		}
+
 		try {
-			return { data: parseResponse(out.text) };
+			const result = parseResponse(out.text);
+			console.log('[TAROT] ✓ Successfully parsed tarot reading');
+			return { data: result };
 		} catch (e) {
-			if (attempt === 1) return { error: 'Failed to parse AI response', detail: e.message, status: 502 };
+			console.error(`[TAROT] ✗ Parse attempt ${attempt + 1} failed:`, e.message);
+			if (attempt === 1) {
+				console.error('[TAROT] Full output:', out.text);
+				return { error: 'Failed to parse AI response', detail: e.message, fullOutput: out.text, status: 502 };
+			}
 		}
 	}
 }

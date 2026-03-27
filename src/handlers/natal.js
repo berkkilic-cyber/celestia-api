@@ -33,10 +33,10 @@ function parseAnalysisJSON(text) {
 
 	// Try to extract JSON from the response (handle text before/after JSON)
 	let jsonStr = text.trim();
-	
+
 	// Remove code blocks if present
 	jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
-	
+
 	// Try to find JSON object in the text (in case there's extra text)
 	const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
 	if (jsonMatch) {
@@ -65,7 +65,7 @@ function parseAnalysisJSON(text) {
 			throw new Error(`Missing or empty key: ${k}`);
 		}
 	}
-	
+
 	console.log('[NATAL-ANALYSIS-DEBUG] All keys validated successfully');
 	return Object.fromEntries(KEYS.map((k) => [k, parsed[k]]));
 }
@@ -89,16 +89,21 @@ export async function handleNatalAnalysis(request, env) {
 	const chartFacts = buildChartFacts(chart);
 	if (!chartFacts) return { error: 'Failed to compute chart facts', status: 500 };
 
-	const langInstruction = {
-		'tr-TR': 'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ). Use a warm, intimate Turkish phrases that feel personal and grounded. Honor the depth of Turkish astrological tradition.',
-		'de-DE': 'Write entirely in German with precise, grounded language. German astrology values clarity and thoughtfulness—be specific and substantive. Use "du" form to speak directly and warmly to the person.',
-		'fr-FR': 'Write entirely in French with elegance and poetic warmth. French astrology values nuance and connection—weave in personal resonance. Speak directly with "tu" form, maintaining intimacy.',
-		'en': 'Write entirely in English. Use warm, accessible language that feels conversational yet wise. Speak directly with "you," creating a tone of intimate guidance.',
-	}[locale] || 'Write entirely in English. Use warm, accessible language that feels conversational yet wise. Speak directly with "you," creating a tone of intimate guidance.';
+	const langInstruction =
+		{
+			'tr-TR':
+				'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ). Use a warm, intimate Turkish phrases that feel personal and grounded. Honor the depth of Turkish astrological tradition.',
+			'de-DE':
+				'Write entirely in German with precise, grounded language. German astrology values clarity and thoughtfulness—be specific and substantive. Use "du" form to speak directly and warmly to the person.',
+			'fr-FR':
+				'Write entirely in French with elegance and poetic warmth. French astrology values nuance and connection—weave in personal resonance. Speak directly with "tu" form, maintaining intimacy.',
+			en: 'Write entirely in English. Use warm, accessible language that feels conversational yet wise. Speak directly with "you," creating a tone of intimate guidance.',
+		}[locale] ||
+		'Write entirely in English. Use warm, accessible language that feels conversational yet wise. Speak directly with "you," creating a tone of intimate guidance.';
 
 	const system = [
 		'You are a warm astrologer writing personal natal chart analysis.',
-		"Speak directly to the person. Your tone is intimate and encouraging.",
+		'Speak directly to the person. Your tone is intimate and encouraging.',
 		langInstruction,
 		'Respond ONLY with valid JSON—no extra text, no explanation, no markdown.',
 	].join('\n');
@@ -122,7 +127,7 @@ export async function handleNatalAnalysis(request, env) {
 	].join('\n');
 
 	const out = await callLlama(env, ANALYSIS_CFG, system, user);
-	
+
 	console.log('[NATAL-ANALYSIS] API Response:', {
 		error: out?.error,
 		hasText: !!out?.text,
@@ -156,12 +161,17 @@ export async function handleNatalAnalysis(request, env) {
 // ─── /natal-chat ─────────────────────────────────────────────────────────────
 
 function buildChatSystemPrompt(chartFacts, locale) {
-	const langInstruction = {
-		'tr-TR': 'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ). Use warm, intimate Turkish language that honors the spiritual depth. Speak with the familiarity and care of someone who truly knows them.',
-		'de-DE': 'Write entirely in German with precision and thoughtful clarity. German astrology values substantive insight—be specific and grounded. Use "du" to create warmth and directness.',
-		'fr-FR': 'Write entirely in French with poetic elegance and personal warmth. French astrology values nuance and soul connection—incorporate this into your language. Use "tu" form for intimacy.',
-		'en': 'Write entirely in English with conversational warmth and wisdom. Speak directly with "you," creating a tone of intimate mentorship.',
-	}[locale] || 'Write entirely in English with conversational warmth and wisdom. Speak directly with "you," creating a tone of intimate mentorship.';
+	const langInstruction =
+		{
+			'tr-TR':
+				'Write ENTIRELY in Turkish with CORRECT Turkish characters ALWAYS (ç, ş, ğ, ı, ö, ü, İ). Never use c instead of ç, s instead of ş, g instead of ğ, etc. Check spelling carefully. Use warm, intimate Turkish language that honors spiritual depth. Speak with familiarity and care. Use "sen" for directness',
+			'de-DE':
+				'Write ENTIRELY in German with correct spelling and grammar. German values precision and substantive insight—be specific, grounded, and accurate. Use "du" form for warmth and directness. Proofread for accurate spelling.',
+			'fr-FR':
+				'Write ENTIRELY in French with elegant, poetic language and correct spelling. French values nuance and soul connection—incorporate this with linguistic precision. Use "tu" form for intimacy. Ensure all accents (é, è, ê, à, ù, etc.) are correct.',
+			en: 'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.',
+		}[locale] ||
+		'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.';
 
 	return [
 		'You are a warm, wise astrologer in a deep conversation with someone you care about.',
