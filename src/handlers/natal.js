@@ -80,10 +80,11 @@ export async function handleNatalAnalysis(request, env) {
 	const cacheKey = buildAnalysisCacheKey(body, locale);
 
 	// KV cache hit
-	try {
-		const cached = await env.NATAL_ANALYSIS_KV.get(cacheKey, 'json');
-		if (cached) return { data: cached };
-	} catch (_) {}
+	// for deployment purpose!!!!!!!!!!!
+	// try {
+	// 	const cached = await env.NATAL_ANALYSIS_KV.get(cacheKey, 'json');
+	// 	if (cached) return { data: cached };
+	// } catch (_) {}
 
 	const chart = computeNatal(body);
 	const chartFacts = buildChartFacts(chart);
@@ -151,9 +152,10 @@ export async function handleNatalAnalysis(request, env) {
 	}
 
 	// Cache permanently (birth chart doesn't change)
-	try {
-		await env.NATAL_ANALYSIS_KV.put(cacheKey, JSON.stringify(analysis));
-	} catch (_) {}
+	// for deployment purposes !!!!!!!!!
+	// try {
+	// 	await env.NATAL_ANALYSIS_KV.put(cacheKey, JSON.stringify(analysis));
+	// } catch (_) {}
 
 	return { data: analysis };
 }
