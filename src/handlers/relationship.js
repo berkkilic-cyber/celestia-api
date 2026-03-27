@@ -1,9 +1,11 @@
 // src/handlers/relationship.js
 import { callLlama } from '../lib/llama.js';
 import { buildChartFacts, formatSynastryAspects } from '../lib/chart.js';
+import { pickLocale } from '../lib/locale.js';
 
 const VALID_RELATION_TYPES = ['romantic', 'family', 'friendship', 'business'];
 const CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 500, temperature: 0.7 };
+const CHAT_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1000, temperature: 0.8 };
 
 function buildCacheKey(person1, person2, relationType) {
 	const personStr = (p) => {
@@ -127,4 +129,65 @@ No markdown. Valid JSON only.`;
 	} catch (_) {}
 
 	return { data: result };
+}
+
+// ─── /relationship-chat ─────────────────────────────────────────────────────
+
+function buildRelationshipChatPrompt(compositeChartFacts, synastryFacts, relationType, locale) {
+	const langInstruction = {
+		'tr-TR': 'Write entirely in Turkish with correct Turkish characters (ç, ş, ğ, ı, ö, ü, İ). Use warm, intimate Turkish language that honors the spiritual depth. Speak with the familiarity and care of someone who truly knows them.',
+		'de-DE': 'Write entirely in German with precision and thoughtful clarity. German astrology values substantive insight—be specific and grounded. Use "du" to create warmth and directness.',
+		'fr-FR': 'Write entirely in French with poetic elegance and personal warmth. French astrology values nuance and soul connection—incorporate this into your language. Use "tu" form for intimacy.',
+		'en': 'Write entirely in English with conversational warmth and wisdom. Speak directly with "you," creating a tone of intimate mentorship.',
+	}[locale] || 'Write entirely in English with conversational warmth and wisdom. Speak directly with "you," creating a tone of intimate mentorship.';
+
+	return [
+		'You are a warm, wise relationship astrologer guiding someone about their connection with another person.',
+		'You read their composite chart and synastry aspects with deep insight and compassion.',
+		'You see relationships as sacred mirrors for growth and evolution.',
+		'',
+		`Relationship type: ${relationType}`,
+		'',
+		'Composite chart (the relationship itself):',
+		compositeChartFacts,
+		'',
+		synastryFacts ? `Synastry aspects:\n${synastryFacts}` : '',
+		'',
+		langInstruction,
+		'',
+		'Guidelines for your voice:',
+		'- Deeply personal and compassionate, like a trusted relationship counselor',
+		'- 80-150 words per reply—thoughtful, not rushed',
+		'- Reference specific composite placements and synastry aspects naturally',
+		'- Balance honesty with encouragement; frame challenges as growth opportunities for the pair',
+		'- Focus on the dynamic between the two people, not individual charts',
+		'- No generic advice. Every response should feel written for this specific pair',
+		'- Never apologize for astrology or disclaim its value',
+	].join('\n');
+}
+
+export async function handleRelationshipChat(request, env) {
+	const body = await request.json();
+
+	const message = body.message;
+	if (!message?.trim()) return { error: 'Missing or empty message', status: 400 };
+	if (message.length > 2000) return { error: 'Message too long (max 2000 characters)', status: 400 };
+	if (!body.compositeChart) return { error: 'Missing: compositeChart', status: 400 };
+
+	const relationType = body.relationType;
+	if (!relationType || !VALID_RELATION_TYPES.includes(relationType))
+		return { error: 'relationType must be one of: romantic, family, friendship, business', status: 400 };
+
+	const compositeChartFacts = buildChartFacts(body.compositeChart);
+	if (!compositeChartFacts) return { error: 'Invalid compositeChart object', status: 400 };
+
+	const synastryFacts = Array.isArray(body.synastryAspects) ? formatSynastryAspects(body.synastryAspects) : null;
+
+	const locale = pickLocale(body.lang);
+	const systemPrompt = buildRelationshipChatPrompt(compositeChartFacts, synastryFacts, relationType, locale);
+
+	const out = await callLlama(env, CHAT_CFG, systemPrompt, message.trim());
+	if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
+
+	return { data: { reply: out.text } };
 }

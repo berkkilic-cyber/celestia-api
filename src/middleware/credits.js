@@ -16,6 +16,7 @@ export function resolveAction(pathname, body) {
   }
   if (pathname === "/natal-chat")         return "ai_qa";
   if (pathname === "/relationship-score") return "compatibility";
+  if (pathname === "/relationship-chat")  return "ai_qa";
   if (pathname === "/natal-analysis")     return "natal_interpretation";
   if (pathname === "/ai")                 return "ai_qa";
   return null;

@@ -7,7 +7,7 @@ import { gateCredits } from "./middleware/credits.js";
 
 import { handleNatal, handleNatalAnalysis, handleNatalChat } from "./handlers/natal.js";
 import { handleTarot } from "./handlers/tarot.js";
-import { handleRelationshipScore } from "./handlers/relationship.js";
+import { handleRelationshipScore, handleRelationshipChat } from "./handlers/relationship.js";
 import { handleAI } from "./handlers/ai.js";
 import { handleAppleAuth, handleGoogleAuth, handleGuestAuth, handleLogout, handleGetMe, handleGetCredits } from "./handlers/auth.js";
 import { handlePlacesAutocomplete, handlePlacesDetails } from "./handlers/places.js";
@@ -32,6 +32,7 @@ const PROTECTED_ROUTES = new Set([
   "/tarot",
   "/natal-chat",
   "/relationship-score",
+  "/relationship-chat",
   "/ai",
 ]);
 
@@ -89,6 +90,7 @@ export default {
         else if (path === "/tarot")         handlerResult = await handleTarot(request, env);
         else if (path === "/natal-chat")    handlerResult = await handleNatalChat(request, env);
         else if (path === "/relationship-score") handlerResult = await handleRelationshipScore(request, env);
+        else if (path === "/relationship-chat") handlerResult = await handleRelationshipChat(request, env);
         else if (path === "/ai")            handlerResult = await handleAI(request, env);
 
         const res = dispatch(handlerResult);
