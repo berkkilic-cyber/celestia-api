@@ -13,7 +13,7 @@ export const ACTION_COSTS = {
   ai_qa: 1,
   compatibility: 0,
   transit_forecast: 2,
-  natal_interpretation: 3,
+  natal_interpretation: 0,
   // Free actions — not consumed
   daily_cosmic_message: 0,
   tarot_single: 0,
