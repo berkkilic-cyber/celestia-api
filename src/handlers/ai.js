@@ -1,5 +1,6 @@
 // src/handlers/ai.js
-import { callLlama } from '../lib/llama.js';
+// import { callLlama } from '../lib/llama.js';
+import { callOpenAI } from '../lib/openai.js';
 import { buildChartFacts } from '../lib/chart.js';
 import { pickLocale, clampInt, requireBirthData } from '../lib/locale.js';
 
@@ -10,7 +11,8 @@ const CORS_HEADERS = {
 };
 
 function actionConfig(action) {
-	const base = { model: 'llama-3.1-8b-instant', max_output_tokens: 70, temperature: 0.85 };
+	// const base = { model: 'llama-3.1-8b-instant', max_output_tokens: 70, temperature: 0.85 };
+	const base = { model: 'gpt-4o-mini', max_output_tokens: 70, temperature: 0.85 };
 	switch (action) {
 		case 'daily_cosmic_message':
 			return { ...base, max_output_tokens: 70, temperature: 0.9 };
@@ -171,7 +173,7 @@ export async function handleAI(request, env) {
 	const cached = await cache.match(cacheKeyReq);
 	if (cached) return { rawResponse: cached }; // bypass json() wrapper
 
-	const out = await callLlama(env, cfg, prompt.system, prompt.user);
+	const out = await callOpenAI(env, cfg, prompt.system, prompt.user);
 	if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
 
 	const responseBody = { action, locale, result: out.text };

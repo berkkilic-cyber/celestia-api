@@ -1,5 +1,6 @@
 // src/handlers/tarot.js
-import { callLlama } from '../lib/llama.js';
+// import { callLlama } from '../lib/llama.js';
+import { callOpenAI } from '../lib/openai.js';
 import { pickLocale } from '../lib/locale.js';
 
 const VALID_SPREAD_TYPES = ['single_card', 'yes_no', 'three_card', 'love', 'career', 'celtic_cross'];
@@ -31,7 +32,8 @@ const TONE_MAP = {
 	celtic_cross: 'deep and comprehensive',
 };
 
-const CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1500, temperature: 0.85 };
+// const CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1500, temperature: 0.85 };
+const CFG = { model: 'gpt-4o-mini', max_output_tokens: 1500, temperature: 0.85 };
 
 function formatCards(cards, spreadType) {
 	const positions = SPREAD_POSITIONS[spreadType];
@@ -179,7 +181,7 @@ export async function handleTarot(request, env) {
 	].join('\n');
 
 	for (let attempt = 0; attempt < 2; attempt++) {
-		const out = await callLlama(env, CFG, system, user);
+		const out = await callOpenAI(env, CFG, system, user);
 
 		console.log(`[TAROT] Attempt ${attempt + 1} - API Response:`, {
 			error: out?.error,

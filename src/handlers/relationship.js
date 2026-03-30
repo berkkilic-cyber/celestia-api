@@ -1,11 +1,14 @@
 // src/handlers/relationship.js
-import { callLlama } from '../lib/llama.js';
+// import { callLlama } from '../lib/llama.js';
+import { callOpenAI } from '../lib/openai.js';
 import { buildChartFacts, formatSynastryAspects } from '../lib/chart.js';
 import { pickLocale } from '../lib/locale.js';
 
 const VALID_RELATION_TYPES = ['romantic', 'family', 'friendship', 'business'];
-const CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 500, temperature: 0.7 };
-const CHAT_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1000, temperature: 0.8 };
+// const CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 500, temperature: 0.7 };
+// const CHAT_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1000, temperature: 0.8 };
+const CFG = { model: 'gpt-4o-mini', max_output_tokens: 500, temperature: 0.7 };
+const CHAT_CFG = { model: 'gpt-4o-mini', max_output_tokens: 1000, temperature: 0.8 };
 
 function buildCacheKey(person1, person2, relationType) {
 	const personStr = (p) => {
@@ -113,7 +116,7 @@ No markdown. Valid JSON only.`;
 
 	let result;
 	for (let attempt = 0; attempt < 2; attempt++) {
-		const out = await callLlama(env, CFG, system, user);
+		const out = await callOpenAI(env, CFG, system, user);
 		if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
 		try {
 			result = parseResponse(out.text);
@@ -191,7 +194,7 @@ export async function handleRelationshipChat(request, env) {
 	const locale = pickLocale(body.lang);
 	const systemPrompt = buildRelationshipChatPrompt(compositeChartFacts, synastryFacts, relationType, locale);
 
-	const out = await callLlama(env, CHAT_CFG, systemPrompt, message.trim());
+	const out = await callOpenAI(env, CHAT_CFG, systemPrompt, message.trim());
 	if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
 
 	return { data: { reply: out.text } };

@@ -1,12 +1,15 @@
 // src/handlers/natal.js
 import { computeNatal } from '../natal-core.js';
 import { buildChartFacts } from '../lib/chart.js';
-import { callLlama } from '../lib/llama.js';
+// import { callLlama } from '../lib/llama.js';
+import { callOpenAI } from '../lib/openai.js';
 import { pickLocale } from '../lib/locale.js';
 
 const BIRTH_FIELDS = ['year', 'month', 'day', 'hour', 'minute', 'tzOffsetMinutes', 'latitude', 'longitude'];
-const CHAT_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1000, temperature: 0.8 };
-const ANALYSIS_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 800, temperature: 0.7 };
+// const CHAT_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1000, temperature: 0.8 };
+// const ANALYSIS_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 800, temperature: 0.7 };
+const CHAT_CFG = { model: 'gpt-4o-mini', max_output_tokens: 1000, temperature: 0.8 };
+const ANALYSIS_CFG = { model: 'gpt-4o-mini', max_output_tokens: 800, temperature: 0.7 };
 
 // ─── /natal ──────────────────────────────────────────────────────────────────
 
@@ -127,7 +130,7 @@ export async function handleNatalAnalysis(request, env) {
 		'Rules: Speak directly using "your". Ground in chart placements. Personal tone. Warm voice.',
 	].join('\n');
 
-	const out = await callLlama(env, ANALYSIS_CFG, system, user);
+	const out = await callOpenAI(env, ANALYSIS_CFG, system, user);
 
 	console.log('[NATAL-ANALYSIS] API Response:', {
 		error: out?.error,
@@ -211,7 +214,7 @@ export async function handleNatalChat(request, env) {
 	const locale = pickLocale(body.lang);
 	const systemPrompt = buildChatSystemPrompt(chartFacts, locale);
 
-	const out = await callLlama(env, CHAT_CFG, systemPrompt, message.trim());
+	const out = await callOpenAI(env, CHAT_CFG, systemPrompt, message.trim());
 	if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };
 
 	return { data: { reply: out.text } };
