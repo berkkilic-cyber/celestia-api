@@ -33,7 +33,12 @@
 		}
 	],
 	"triggers": {
-		"crons": ["0 0 1 * *"]
+		"crons": ["0 0 1 * *", "0 0 * * *"]
+	},
+	"vars": {
+		"APPLE_CLIENT_ID": "com.bkpersonalprojects.celestia",
+		"GOOGLE_CLIENT_ID": "295027456181-f0qu2l6n30jnq56lh9808d40k4835qr1.apps.googleusercontent.com",
+		"LLAMA_API_URL": "https://api.groq.com/openai/v1/chat/completions"
 	}
 	/**
 	 * Smart Placement

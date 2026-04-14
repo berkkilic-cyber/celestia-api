@@ -54,7 +54,7 @@ export async function verifyGoogleToken(identityToken, clientId) {
     throw new Error('Invalid Google token issuer');
   }
 
-  // Verify audience matches your iOS client ID
+  // Verify audience matches your client ID
   if (payload.aud !== clientId) {
     throw new Error('Google token audience mismatch');
   }

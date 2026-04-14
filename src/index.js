@@ -10,13 +10,16 @@ import { pickLocale } from './lib/locale.js';
 import { handleTarot } from './handlers/tarot.js';
 import { handleRelationshipScore, handleRelationshipChat } from './handlers/relationship.js';
 import { handleAI } from './handlers/ai.js';
-import { handleAppleAuth, handleGoogleAuth, handleGuestAuth, handleLogout, handleGetMe, handleGetCredits } from './handlers/auth.js';
+import { handleAppleAuth, handleGoogleAuth, handleGuestAuth, handleLogout, handleGetMe, handleGetCredits, handleDeleteAccount } from './handlers/auth.js';
 import { handlePlacesAutocomplete, handlePlacesDetails } from './handlers/places.js';
+import { purgeDeletedUsers, updateUser, upsertDeviceToken, removeDeviceToken } from './db/users.js';
+import { computeNatal } from './natal-core.js';
 import { handleRewardedCallback } from './handlers/ads.js';
+import { sendApnsPush } from './lib/apns.js';
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
-	'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+	'Access-Control-Allow-Methods': 'POST, GET, DELETE, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 	'Access-Control-Expose-Headers': 'X-Credits-Balance, X-Credits-Cost',
 };
@@ -50,10 +53,60 @@ export default {
 			if (path === '/auth/google') return dispatch(await handleGoogleAuth(request, env));
 			if (path === '/auth/guest' && request.method === 'POST') return dispatch(await handleGuestAuth(env));
 			if (path === '/auth/logout') return dispatch(await handleLogout(request, env));
+			if (path === '/auth/delete-account') {
+				const userId = await requireAuth(request, env);
+				return dispatch(await handleDeleteAccount(request, env, userId));
+			}
 
 			// ── AdMob SSV callback (called by Google, no auth) ─────────────────
 			// AdMob SSV callback: https://celestia-api.berk-kilic.workers.dev/api/ads/rewarded-callback
 			if (path === '/api/ads/rewarded-callback') return dispatch(await handleRewardedCallback(request, env));
+
+			// ── Admin: send test push (auth via ADMIN_SECRET bearer) ───────────
+			if (path === '/admin/send-push' && request.method === 'POST') {
+				const authz = request.headers.get('authorization');
+				if (!env.ADMIN_SECRET || authz !== `Bearer ${env.ADMIN_SECRET}`) {
+					return json({ error: 'Unauthorized' }, 401);
+				}
+				const body = await request.json();
+				const userId = body.userId;
+				const explicitToken = body.token;
+				const title = body.title || 'Celestia';
+				const message = body.body || 'Hello from Celestia';
+				const production = body.production !== false; // default true
+
+				let tokens;
+				if (explicitToken) {
+					tokens = [{ token: explicitToken }];
+				} else if (userId) {
+					const { results } = await env.celestia_db
+						.prepare('SELECT token FROM device_tokens WHERE user_id = ?')
+						.bind(userId)
+						.all();
+					tokens = results;
+				} else {
+					return json({ error: 'userId or token required' }, 400);
+				}
+
+				if (!tokens.length) return json({ error: 'No device tokens found' }, 404);
+
+				const results = [];
+				for (const row of tokens) {
+					try {
+						const r = await sendApnsPush({ env, token: row.token, title, body: message, production });
+						results.push({
+							token: row.token.slice(0, 16) + '...',
+							status: r.status,
+							ok: r.ok,
+							apnsId: r.apnsId,
+							body: r.body || null,
+						});
+					} catch (e) {
+						results.push({ token: row.token.slice(0, 16) + '...', error: String(e) });
+					}
+				}
+				return json({ attempted: tokens.length, production, results });
+			}
 
 			// ── Google Places (public) ─────────────────────────────────────────
 			if (path === '/places/autocomplete') return dispatch(await handlePlacesAutocomplete(request, env));
@@ -80,6 +133,20 @@ export default {
 				const userId = await requireAuth(request, env);
 				return dispatch(await handleGetCredits(env, userId));
 			}
+			if (path === '/user/device-token' && request.method === 'POST') {
+				const userId = await requireAuth(request, env);
+				const { token, platform } = await request.json();
+				if (!token) return json({ error: 'token required' }, 400);
+				await upsertDeviceToken(env.celestia_db, userId, token, platform || 'ios');
+				return json({ success: true });
+			}
+			if (path === '/user/device-token' && request.method === 'DELETE') {
+				await requireAuth(request, env);
+				const { token } = await request.json();
+				if (!token) return json({ error: 'token required' }, 400);
+				await removeDeviceToken(env.celestia_db, token);
+				return json({ success: true });
+			}
 
 			// ── Natal analysis (cache-first, only charge on miss) ─────────────────
 			if (path === '/natal-analysis') {
@@ -89,10 +156,32 @@ export default {
 				const locale = pickLocale(body.lang);
 				const cacheKey = buildAnalysisCacheKey(body, locale);
 
-				// try {
-				//   const cached = await env.NATAL_ANALYSIS_KV.get(cacheKey, 'json');
-				//   if (cached) return json(cached);
-				// } catch (_) {}
+				// Save birth data + signs to user profile (must run even on cache hit)
+				try {
+					const chart = computeNatal(body);
+					const sunSign = chart.planets.find(p => p.name === 'Sun')?.sign || null;
+					const moonSign = chart.planets.find(p => p.name === 'Moon')?.sign || null;
+					const risingSign = chart.ascDetail?.sign || null;
+					const profileUpdate = {
+						birth_date: `${body.year}-${String(body.month).padStart(2, '0')}-${String(body.day).padStart(2, '0')}`,
+						birth_time: `${String(body.hour).padStart(2, '0')}:${String(body.minute).padStart(2, '0')}`,
+						birth_place: body.birth_place || null,
+						latitude: body.latitude,
+						longitude: body.longitude,
+						sun_sign: sunSign,
+						moon_sign: moonSign,
+						rising_sign: risingSign,
+					};
+					if (typeof body.name === 'string' && body.name.trim()) {
+						profileUpdate.name = body.name.trim();
+					}
+					await updateUser(env.celestia_db, userId, profileUpdate);
+				} catch (_) { console.error('Failed to save user profile:', _); }
+
+				try {
+				  const cached = await env.NATAL_ANALYSIS_KV.get(cacheKey, 'json');
+				  if (cached) return json(cached);
+				} catch (_) {}
 
 				const gate = await gateCredits(path, body, userId, env.NATAL_ANALYSIS_KV, env.celestia_db);
 				if (!gate.ok) return json({ error: gate.error, balance: gate.balance }, gate.status);
@@ -136,6 +225,7 @@ export default {
 	// ── Monthly subscription credit top-up ─────────────────────────────────────
 	async scheduled(event, env, ctx) {
 		if (event.cron === '0 0 1 * *') ctx.waitUntil(monthlyTopUp(env));
+		if (event.cron === '0 0 * * *') ctx.waitUntil(dailyPurge(env));
 	},
 };
 
@@ -188,4 +278,9 @@ async function monthlyTopUp(env) {
 			.run();
 	}
 	console.log(`Monthly top-up complete for ${results.length} subscribers`);
+}
+
+async function dailyPurge(env) {
+	const count = await purgeDeletedUsers(env.celestia_db);
+	if (count > 0) console.log(`Purged ${count} accounts scheduled for deletion`);
 }

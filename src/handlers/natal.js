@@ -155,10 +155,9 @@ export async function handleNatalAnalysis(request, env) {
 	}
 
 	// Cache permanently (birth chart doesn't change)
-	// for deployment purposes !!!!!!!!!
-	// try {
-	// 	await env.NATAL_ANALYSIS_KV.put(cacheKey, JSON.stringify(analysis));
-	// } catch (_) {}
+	try {
+		await env.NATAL_ANALYSIS_KV.put(cacheKey, JSON.stringify(analysis));
+	} catch (_) {}
 
 	return { data: analysis };
 }

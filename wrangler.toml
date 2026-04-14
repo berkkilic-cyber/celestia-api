@@ -4,7 +4,7 @@ main = "src/index.js"
 compatibility_date = "2024-01-01"
 
 [triggers]
-crons = ["0 0 1 * *"]
+crons = ["0 0 1 * *", "0 0 * * *"]
 
 [[kv_namespaces]]
 binding = "NATAL_ANALYSIS_KV"
@@ -16,6 +16,6 @@ database_name = "celestia-db"
 database_id = "3cfcb7e0-6750-4f09-adc9-dfff4f576317"
 
 [vars]
-APPLE_CLIENT_ID  = "com.yourcompany.celestia"
-GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID"
+APPLE_CLIENT_ID  = "com.bkpersonalprojects.celestia"
+GOOGLE_CLIENT_ID = "295027456181-f0qu2l6n30jnq56lh9808d40k4835qr1.apps.googleusercontent.com"
 LLAMA_API_URL = "https://api.groq.com/openai/v1/chat/completions"
