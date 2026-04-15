@@ -5,12 +5,12 @@ import { computeComposite } from './natal-core.js';
 import { validateSession, extractToken } from './auth/session.js';
 import { gateCredits } from './middleware/credits.js';
 
-import { handleNatal, handleNatalAnalysis, handleNatalChat, buildAnalysisCacheKey } from './handlers/natal.js';
+import { handleNatal, handleNatalAnalysis, handleNatalChat, buildAnalysisCacheKey, buildBirthSignature } from './handlers/natal.js';
 import { pickLocale } from './lib/locale.js';
 import { handleTarot } from './handlers/tarot.js';
 import { handleRelationshipScore, handleRelationshipChat } from './handlers/relationship.js';
 import { handleAI } from './handlers/ai.js';
-import { handleAppleAuth, handleGoogleAuth, handleGuestAuth, handleLogout, handleGetMe, handleGetCredits, handleDeleteAccount } from './handlers/auth.js';
+import { handleAppleAuth, handleGoogleAuth, handleGuestAuth, handleLogout, handleGetMe, handleUpdateMe, handleGetCredits, handleDeleteAccount } from './handlers/auth.js';
 import { handlePlacesAutocomplete, handlePlacesDetails } from './handlers/places.js';
 import { purgeDeletedUsers, updateUser, upsertDeviceToken, removeDeviceToken } from './db/users.js';
 import { computeNatal } from './natal-core.js';
@@ -19,7 +19,7 @@ import { sendApnsPush } from './lib/apns.js';
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
-	'Access-Control-Allow-Methods': 'POST, GET, DELETE, OPTIONS',
+	'Access-Control-Allow-Methods': 'POST, GET, PATCH, DELETE, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 	'Access-Control-Expose-Headers': 'X-Credits-Balance, X-Credits-Cost',
 };
@@ -51,7 +51,7 @@ export default {
 			// ── Public auth routes ───────────────────────────────────────────────
 			if (path === '/auth/apple') return dispatch(await handleAppleAuth(request, env));
 			if (path === '/auth/google') return dispatch(await handleGoogleAuth(request, env));
-			if (path === '/auth/guest' && request.method === 'POST') return dispatch(await handleGuestAuth(env));
+			if (path === '/auth/guest' && request.method === 'POST') return dispatch(await handleGuestAuth(request, env));
 			if (path === '/auth/logout') return dispatch(await handleLogout(request, env));
 			if (path === '/auth/delete-account') {
 				const userId = await requireAuth(request, env);
@@ -127,6 +127,7 @@ export default {
 			// ── Protected user routes ────────────────────────────────────────────
 			if (path === '/user/me') {
 				const userId = await requireAuth(request, env);
+				if (request.method === 'PATCH') return dispatch(await handleUpdateMe(request, env, userId));
 				return dispatch(await handleGetMe(env, userId));
 			}
 			if (path === '/user/credits') {
@@ -148,13 +149,14 @@ export default {
 				return json({ success: true });
 			}
 
-			// ── Natal analysis (cache-first, only charge on miss) ─────────────────
+			// ── Natal analysis (per-user cache, only charge on miss) ─────────────
 			if (path === '/natal-analysis') {
 				const userId = await requireAuth(request, env);
 				const cloned = request.clone();
 				const body = await cloned.json();
 				const locale = pickLocale(body.lang);
-				const cacheKey = buildAnalysisCacheKey(body, locale);
+				const cacheKey = buildAnalysisCacheKey(userId, locale);
+				const birthSig = buildBirthSignature(body);
 
 				// Save birth data + signs to user profile (must run even on cache hit)
 				try {
@@ -178,15 +180,21 @@ export default {
 					await updateUser(env.celestia_db, userId, profileUpdate);
 				} catch (_) { console.error('Failed to save user profile:', _); }
 
+				// Cache hit only when the stored birth signature matches the request
 				try {
-				  const cached = await env.NATAL_ANALYSIS_KV.get(cacheKey, 'json');
-				  if (cached) return json(cached);
+					const cached = await env.NATAL_ANALYSIS_KV.get(cacheKey, 'json');
+					if (cached?.birth === birthSig && cached?.data) return json(cached.data);
 				} catch (_) {}
 
 				const gate = await gateCredits(path, body, userId, env.NATAL_ANALYSIS_KV, env.celestia_db);
 				if (!gate.ok) return json({ error: gate.error, balance: gate.balance }, gate.status);
 
 				const handlerResult = await handleNatalAnalysis(request, env);
+				if (handlerResult?.data) {
+					try {
+						await env.NATAL_ANALYSIS_KV.put(cacheKey, JSON.stringify({ data: handlerResult.data, birth: birthSig }));
+					} catch (_) {}
+				}
 				const res = dispatch(handlerResult);
 				if (gate.balance !== undefined) res.headers.set('X-Credits-Balance', String(gate.balance));
 				if (gate.cost !== undefined) res.headers.set('X-Credits-Cost', String(gate.cost));
@@ -206,7 +214,7 @@ export default {
 				else if (path === '/natal-chat') handlerResult = await handleNatalChat(request, env);
 				else if (path === '/relationship-score') handlerResult = await handleRelationshipScore(request, env);
 				else if (path === '/relationship-chat') handlerResult = await handleRelationshipChat(request, env);
-				else if (path === '/ai') handlerResult = await handleAI(request, env);
+				else if (path === '/ai') handlerResult = await handleAI(request, env, userId);
 
 				const res = dispatch(handlerResult);
 				if (gate.balance !== undefined) res.headers.set('X-Credits-Balance', String(gate.balance));

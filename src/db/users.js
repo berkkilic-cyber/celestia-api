@@ -60,6 +60,15 @@ export async function purgeDeletedUsers(db) {
   return results.length;
 }
 
+export async function deleteUserCompletely(db, id) {
+  await db.prepare(`DELETE FROM credit_transactions WHERE user_id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM credits WHERE user_id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM subscriptions WHERE user_id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM iap_purchases WHERE user_id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM device_tokens WHERE user_id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM users WHERE id = ?`).bind(id).run();
+}
+
 export async function upgradeGuestUser(db, id, { apple_user_id, google_user_id, email, name }) {
   const sets = ['is_guest = 0'];
   const vals = [];

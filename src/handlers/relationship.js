@@ -3,6 +3,7 @@
 import { callOpenAI } from '../lib/openai.js';
 import { buildChartFacts, formatSynastryAspects } from '../lib/chart.js';
 import { pickLocale } from '../lib/locale.js';
+import { relationshipScorePrompt, relationshipChatSystemPrompt } from '../prompts.js';
 
 const VALID_RELATION_TYPES = ['romantic', 'family', 'friendship', 'business'];
 // const CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 500, temperature: 0.7 };
@@ -67,52 +68,15 @@ export async function handleRelationshipScore(request, env) {
 		if (cached) return { data: cached };
 	} catch (_) {}
 
-	const system =
-		'You are a warm, compassionate astrologer reading the dynamics between two souls. You honor both their gifts and growth edges, seeing relationships as sacred mirrors for evolution.';
-	const user = `Analyze the synastry aspects and composite chart for this relationship with warmth and truth.
-
-Relationship type: ${relationType}
-
-${person1.name}\'s chart: ${buildChartFacts(person1.chart)}
-
-${person2.name}\'s chart: ${buildChartFacts(person2.chart)}
-
-Composite chart (the relationship itself): ${buildChartFacts(compositeChart)}
-
-Synastry aspects (how they ignite each other): ${formatSynastryAspects(synastryAspects)}
-
-Create a beautiful, honest relationship reading as JSON with this structure:
-{
-  "overallScore": <number 0-100 representing the relationship's potential and harmony>,
-  "generalText": "<30-40 words in Turkish capturing the essence of their dynamic and what makes it special>",
-  "tags": [
-    {"emoji": "<1 emoji>", "label": "<1-2 word Turkish label for a key relationship strength or theme>"},
-    {"emoji": "<1 emoji>", "label": "<1-2 word Turkish label>"},
-    {"emoji": "<1 emoji>", "label": "<1-2 word Turkish label>"}
-  ],
-  "suggestion": "<10-15 words of Turkish wisdom—what this pair should know or do to nurture their bond>",
-  "breakdown": {
-    "<area1>": <0-100>,
-    "<area2>": <0-100>,
-    "<area3>": <0-100>,
-    "<area4>": <0-100>
-  }
-}
-
-Scoring guidelines:
-- Ground ALL scores in actual synastry aspects and composite chart placements
-- Range: 55-100 (relationships have inherent value)
-- overallScore = weighted average: first two categories × 0.3 each, last two × 0.2 each
-- Share honest insights—strengths AND growth edges
-
-Breakdown categories by relationship type:
-- romantic:   Passion & Attraction, Communication, Trust & Vulnerability, Shared Energy
-- family:     Loyalty & Bonds, Communication, Understanding, Shared Energy
-- friendship: Fun & Connection, Communication, Trust, Shared Energy
-- business:   Leadership & Vision, Communication, Trust & Reliability, Synergy
-
-Write ALL text in beautiful, correct Turkish (ç, ş, ğ, ı, ö, ü, İ).
-No markdown. Valid JSON only.`;
+	const { system, user } = relationshipScorePrompt({
+		relationType,
+		person1Name: person1.name,
+		person1ChartFacts: buildChartFacts(person1.chart),
+		person2Name: person2.name,
+		person2ChartFacts: buildChartFacts(person2.chart),
+		compositeChartFacts: buildChartFacts(compositeChart),
+		synastryFacts: formatSynastryAspects(synastryAspects),
+	});
 
 	let result;
 	for (let attempt = 0; attempt < 2; attempt++) {
@@ -136,44 +100,6 @@ No markdown. Valid JSON only.`;
 
 // ─── /relationship-chat ─────────────────────────────────────────────────────
 
-function buildRelationshipChatPrompt(compositeChartFacts, synastryFacts, relationType, locale) {
-	const langInstruction =
-		{
-			'tr-TR':
-				'Write ENTIRELY in Turkish with CORRECT Turkish characters ALWAYS (ç, ş, ğ, ı, ö, ü, İ). Never use c instead of ç, s instead of ş, g instead of ğ, etc. Check spelling carefully. Use warm, intimate Turkish language that honors spiritual depth. Speak with familiarity and care. Use "sen" for directness',
-			'de-DE':
-				'Write ENTIRELY in German with correct spelling and grammar. German values precision and substantive insight—be specific, grounded, and accurate. Use "du" form for warmth and directness. Proofread for accurate spelling.',
-			'fr-FR':
-				'Write ENTIRELY in French with elegant, poetic language and correct spelling. French values nuance and soul connection—incorporate this with linguistic precision. Use "tu" form for intimacy. Ensure all accents (é, è, ê, à, ù, etc.) are correct.',
-			en: 'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.',
-		}[locale] ||
-		'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.';
-
-	return [
-		'You are a warm, wise relationship astrologer guiding someone about their connection with another person.',
-		'You read their composite chart and synastry aspects with deep insight and compassion.',
-		'You see relationships as sacred mirrors for growth and evolution.',
-		'',
-		`Relationship type: ${relationType}`,
-		'',
-		'Composite chart (the relationship itself):',
-		compositeChartFacts,
-		'',
-		synastryFacts ? `Synastry aspects:\n${synastryFacts}` : '',
-		'',
-		langInstruction,
-		'',
-		'Guidelines for your voice:',
-		'- Deeply personal and compassionate, like a trusted relationship counselor',
-		'- 80-150 words per reply—thoughtful, not rushed',
-		'- Reference specific composite placements and synastry aspects naturally',
-		'- Balance honesty with encouragement; frame challenges as growth opportunities for the pair',
-		'- Focus on the dynamic between the two people, not individual charts',
-		'- No generic advice. Every response should feel written for this specific pair',
-		'- Never apologize for astrology or disclaim its value',
-	].join('\n');
-}
-
 export async function handleRelationshipChat(request, env) {
 	const body = await request.json();
 
@@ -192,7 +118,7 @@ export async function handleRelationshipChat(request, env) {
 	const synastryFacts = Array.isArray(body.synastryAspects) ? formatSynastryAspects(body.synastryAspects) : null;
 
 	const locale = pickLocale(body.lang);
-	const systemPrompt = buildRelationshipChatPrompt(compositeChartFacts, synastryFacts, relationType, locale);
+	const systemPrompt = relationshipChatSystemPrompt({ compositeChartFacts, synastryFacts, relationType, locale });
 
 	const out = await callOpenAI(env, CHAT_CFG, systemPrompt, message.trim());
 	if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };

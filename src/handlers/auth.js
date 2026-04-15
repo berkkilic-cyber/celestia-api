@@ -2,7 +2,7 @@
 import { verifyAppleToken } from "../auth/apple.js";
 import { verifyGoogleToken } from "../auth/google.js";
 import { createSession, deleteSession, extractToken } from "../auth/session.js";
-import { createUser, findUserByAppleId, findUserByGoogleId, findUserById, updateUser, upgradeGuestUser, scheduleDeleteUser, cancelDeleteUser } from "../db/users.js";
+import { createUser, findUserByAppleId, findUserByGoogleId, findUserById, updateUser, upgradeGuestUser, scheduleDeleteUser, cancelDeleteUser, deleteUserCompletely } from "../db/users.js";
 import { initCredits, getCredits } from "../db/credits.js";
 import { validateSession } from "../auth/session.js";
 
@@ -14,9 +14,20 @@ async function resolveCurrentUser(request, env) {
   return findUserById(env.celestia_db, userId);
 }
 
+function extractProfileUpdate(body) {
+  const update = {};
+  if (typeof body.birth_date === 'string') update.birth_date = body.birth_date;
+  if (typeof body.birth_time === 'string') update.birth_time = body.birth_time;
+  if (typeof body.birth_place === 'string') update.birth_place = body.birth_place;
+  if (typeof body.latitude === 'number') update.latitude = body.latitude;
+  if (typeof body.longitude === 'number') update.longitude = body.longitude;
+  return update;
+}
+
 export async function handleAppleAuth(request, env) {
   const cloned = request.clone();
-  const { identity_token, user_name } = await cloned.json();
+  const body = await cloned.json();
+  const { identity_token, user_name } = body;
   if (!identity_token) return { error: "identity_token required", status: 400 };
 
   const appleUser = await verifyAppleToken(identity_token, env.APPLE_CLIENT_ID);
@@ -33,6 +44,11 @@ export async function handleAppleAuth(request, env) {
     }
     if (user.delete_scheduled_at) {
       await cancelDeleteUser(env.celestia_db, user.id);
+    }
+    // If current session is a guest, delete that orphan guest account
+    const currentUser = await resolveCurrentUser(request, env);
+    if (currentUser && currentUser.is_guest && currentUser.id !== user.id) {
+      await deleteUserCompletely(env.celestia_db, currentUser.id);
     }
   } else {
     // No account with this Apple ID — check if current session is a guest
@@ -58,13 +74,19 @@ export async function handleAppleAuth(request, env) {
     }
   }
 
+  const profileUpdate = extractProfileUpdate(body);
+  if (Object.keys(profileUpdate).length) {
+    await updateUser(env.celestia_db, user.id, profileUpdate);
+  }
+
   const token = await createSession(env.NATAL_ANALYSIS_KV, user.id);
   return { data: { token, user: { id: user.id, name: user.name, email: user.email, is_new: isNew } } };
 }
 
 export async function handleGoogleAuth(request, env) {
   const cloned = request.clone();
-  const { identity_token } = await cloned.json();
+  const body = await cloned.json();
+  const { identity_token } = body;
   if (!identity_token) return { error: "identity_token required", status: 400 };
 
   const googleUser = await verifyGoogleToken(identity_token, env.GOOGLE_CLIENT_ID);
@@ -77,6 +99,11 @@ export async function handleGoogleAuth(request, env) {
     user = existingAccount;
     if (user.delete_scheduled_at) {
       await cancelDeleteUser(env.celestia_db, user.id);
+    }
+    // If current session is a guest, delete that orphan guest account
+    const currentUser = await resolveCurrentUser(request, env);
+    if (currentUser && currentUser.is_guest && currentUser.id !== user.id) {
+      await deleteUserCompletely(env.celestia_db, currentUser.id);
     }
   } else {
     // No account with this Google ID — check if current session is a guest
@@ -102,6 +129,11 @@ export async function handleGoogleAuth(request, env) {
     }
   }
 
+  const profileUpdate = extractProfileUpdate(body);
+  if (Object.keys(profileUpdate).length) {
+    await updateUser(env.celestia_db, user.id, profileUpdate);
+  }
+
   const token = await createSession(env.NATAL_ANALYSIS_KV, user.id);
   return { data: { token, user: { id: user.id, name: user.name, email: user.email, is_new: isNew } } };
 }
@@ -110,6 +142,36 @@ export async function handleLogout(request, env) {
   const token = extractToken(request);
   if (token) await deleteSession(env.NATAL_ANALYSIS_KV, token);
   return { data: { success: true } };
+}
+
+export async function handleUpdateMe(request, env, userId) {
+  let body = {};
+  try { body = await request.json(); } catch (_) {}
+
+  const update = {};
+  if (typeof body.name === 'string' && body.name.trim()) update.name = body.name.trim();
+  if (typeof body.birth_date === 'string') update.birth_date = body.birth_date;
+  if (typeof body.birth_time === 'string') update.birth_time = body.birth_time;
+  if (typeof body.birth_place === 'string') update.birth_place = body.birth_place;
+  if (typeof body.latitude === 'number') update.latitude = body.latitude;
+  if (typeof body.longitude === 'number') update.longitude = body.longitude;
+
+  if (!Object.keys(update).length) return { error: 'No updatable fields provided', status: 400 };
+
+  await updateUser(env.celestia_db, userId, update);
+  const user = await findUserById(env.celestia_db, userId);
+  return {
+    data: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      birth_date: user.birth_date,
+      birth_time: user.birth_time,
+      birth_place: user.birth_place,
+      latitude: user.latitude,
+      longitude: user.longitude,
+    },
+  };
 }
 
 export async function handleGetMe(env, userId) {
@@ -129,15 +191,29 @@ export async function handleGetMe(env, userId) {
   };
 }
 
-export async function handleGuestAuth(env) {
+export async function handleGuestAuth(request, env) {
+  let body = {};
+  try { body = await request.json(); } catch (_) {}
+
   const user = await createUser(env.celestia_db, {
     apple_user_id: null,
     google_user_id: null,
     email: null,
-    name: null,
+    name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : null,
     is_guest: 1,
   });
   await initCredits(env.celestia_db, user.id);
+
+  const profileUpdate = {};
+  if (typeof body.birth_date === 'string') profileUpdate.birth_date = body.birth_date;
+  if (typeof body.birth_time === 'string') profileUpdate.birth_time = body.birth_time;
+  if (typeof body.birth_place === 'string') profileUpdate.birth_place = body.birth_place;
+  if (typeof body.latitude === 'number') profileUpdate.latitude = body.latitude;
+  if (typeof body.longitude === 'number') profileUpdate.longitude = body.longitude;
+  if (Object.keys(profileUpdate).length) {
+    await updateUser(env.celestia_db, user.id, profileUpdate);
+  }
+
   const token = await createSession(env.NATAL_ANALYSIS_KV, user.id);
   return { data: { token, user_id: user.id, credits: 5 } };
 }

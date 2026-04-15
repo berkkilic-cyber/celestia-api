@@ -4,12 +4,13 @@ import { buildChartFacts } from '../lib/chart.js';
 // import { callLlama } from '../lib/llama.js';
 import { callOpenAI } from '../lib/openai.js';
 import { pickLocale } from '../lib/locale.js';
+import { natalAnalysisPrompt, natalChatSystemPrompt } from '../prompts.js';
 
 const BIRTH_FIELDS = ['year', 'month', 'day', 'hour', 'minute', 'tzOffsetMinutes', 'latitude', 'longitude'];
 // const CHAT_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1000, temperature: 0.8 };
 // const ANALYSIS_CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 800, temperature: 0.7 };
 const CHAT_CFG = { model: 'gpt-4o-mini', max_output_tokens: 1000, temperature: 0.8 };
-const ANALYSIS_CFG = { model: 'gpt-4o-mini', max_output_tokens: 800, temperature: 0.7 };
+const ANALYSIS_CFG = { model: 'gpt-4o-mini', max_output_tokens: 1200, temperature: 0.7 };
 
 // ─── /natal ──────────────────────────────────────────────────────────────────
 
@@ -23,10 +24,14 @@ export async function handleNatal(request) {
 
 // ─── /natal-analysis ─────────────────────────────────────────────────────────
 
-export function buildAnalysisCacheKey(body, locale) {
+export function buildAnalysisCacheKey(userId, locale) {
+	return `natal-analysis:${userId}:${locale}`;
+}
+
+export function buildBirthSignature(body) {
 	const lat = Number(body.latitude).toFixed(4);
 	const lon = Number(body.longitude).toFixed(4);
-	return `natal-analysis:${body.year}-${body.month}-${body.day}-${body.hour}-${body.minute}-${body.tzOffsetMinutes}-${lat}-${lon}:${locale}`;
+	return `${body.year}-${body.month}-${body.day}-${body.hour}-${body.minute}-${body.tzOffsetMinutes}-${lat}-${lon}`;
 }
 
 function parseAnalysisJSON(text) {
@@ -59,7 +64,7 @@ function parseAnalysisJSON(text) {
 
 	console.log('[NATAL-ANALYSIS-DEBUG] Parsed successfully. Keys:', Object.keys(parsed));
 
-	const KEYS = ['coreTheme', 'strengths', 'challenges', 'loveRelationships', 'careerPurpose', 'spiritualPath'];
+	const KEYS = ['coreTheme', 'strengths', 'challenges', 'loveRelationships', 'careerPurpose', 'moneyAndFame'];
 	for (const k of KEYS) {
 		const value = parsed[k];
 		console.log(`[NATAL-ANALYSIS-DEBUG] Checking key "${k}": type=${typeof value}, length=${value?.length}, empty=${!value?.trim?.()}`);
@@ -80,55 +85,12 @@ export async function handleNatalAnalysis(request, env) {
 	}
 
 	const locale = pickLocale(body.lang);
-	const cacheKey = buildAnalysisCacheKey(body, locale);
-
-	// KV cache hit
-	// for deployment purpose!!!!!!!!!!!
-	// try {
-	// 	const cached = await env.NATAL_ANALYSIS_KV.get(cacheKey, 'json');
-	// 	if (cached) return { data: cached };
-	// } catch (_) {}
 
 	const chart = computeNatal(body);
 	const chartFacts = buildChartFacts(chart);
 	if (!chartFacts) return { error: 'Failed to compute chart facts', status: 500 };
 
-	const langInstruction =
-		{
-			'tr-TR':
-				'Write ENTIRELY in Turkish with CORRECT Turkish characters ALWAYS (ç, ş, ğ, ı, ö, ü, İ). Never use c instead of ç, s instead of ş, g instead of ğ, etc. Check spelling carefully. Use warm, intimate Turkish language that honors spiritual depth. Speak with familiarity and care. Use "sen" for directness',
-			'de-DE':
-				'Write ENTIRELY in German with correct spelling and grammar. German values precision and substantive insight—be specific, grounded, and accurate. Use "du" form for warmth and directness. Proofread for accurate spelling.',
-			'fr-FR':
-				'Write ENTIRELY in French with elegant, poetic language and correct spelling. French values nuance and soul connection—incorporate this with linguistic precision. Use "tu" form for intimacy. Ensure all accents (é, è, ê, à, ù, etc.) are correct.',
-			en: 'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.',
-		}[locale] ||
-		'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.';
-
-	const system = [
-		'You are a warm astrologer writing personal natal chart analysis.',
-		'Speak directly to the person. Your tone is intimate and encouraging.',
-		langInstruction,
-		'Respond ONLY with valid JSON—no extra text, no explanation, no markdown.',
-	].join('\n');
-
-	const user = [
-		'RESPOND WITH ONLY VALID JSON. NO OTHER TEXT.',
-		'',
-		'{',
-		'  "coreTheme": "Their central life purpose (50-60 words)",',
-		'  "strengths": "Natural talents and gifts (50-60 words)",',
-		'  "challenges": "Growth edges presented as evolution (50-60 words)",',
-		'  "loveRelationships": "Love patterns and needs (50-60 words)",',
-		'  "careerPurpose": "Vocational calling (50-60 words)",',
-		'  "spiritualPath": "Spiritual potential (50-60 words)"',
-		'}',
-		'',
-		'Chart data:',
-		chartFacts,
-		'',
-		'Rules: Speak directly using "your". Ground in chart placements. Personal tone. Warm voice.',
-	].join('\n');
+	const { system, user } = natalAnalysisPrompt({ chartFacts, locale });
 
 	const out = await callOpenAI(env, ANALYSIS_CFG, system, user);
 
@@ -154,50 +116,11 @@ export async function handleNatalAnalysis(request, env) {
 		return { error: 'Failed to parse AI response', detail: e.message, fullOutput: out.text, status: 502 };
 	}
 
-	// Cache permanently (birth chart doesn't change)
-	try {
-		await env.NATAL_ANALYSIS_KV.put(cacheKey, JSON.stringify(analysis));
-	} catch (_) {}
 
 	return { data: analysis };
 }
 
 // ─── /natal-chat ─────────────────────────────────────────────────────────────
-
-function buildChatSystemPrompt(chartFacts, locale) {
-	const langInstruction =
-		{
-			'tr-TR':
-				'Write ENTIRELY in Turkish with CORRECT Turkish characters ALWAYS (ç, ş, ğ, ı, ö, ü, İ). Never use c instead of ç, s instead of ş, g instead of ğ, etc. Check spelling carefully. Use warm, intimate Turkish language that honors spiritual depth. Speak with familiarity and care. Use "sen" for directness',
-			'de-DE':
-				'Write ENTIRELY in German with correct spelling and grammar. German values precision and substantive insight—be specific, grounded, and accurate. Use "du" form for warmth and directness. Proofread for accurate spelling.',
-			'fr-FR':
-				'Write ENTIRELY in French with elegant, poetic language and correct spelling. French values nuance and soul connection—incorporate this with linguistic precision. Use "tu" form for intimacy. Ensure all accents (é, è, ê, à, ù, etc.) are correct.',
-			en: 'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.',
-		}[locale] ||
-		'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.';
-
-	return [
-		'You are a warm, wise astrologer in a deep conversation with someone you care about.',
-		'You know their natal chart intimately and speak to their authentic self.',
-		'Your role is to illuminate, encourage, and help them understand their path.',
-		'',
-		'Their natal chart:',
-		chartFacts,
-		'',
-		langInstruction,
-		'',
-		'Guidelines for your voice:',
-		'- Deeply personal and compassionate, like a trusted mentor',
-		'- 80-150 words per reply—thoughtful, not rushed',
-		'- Reference specific placements (sign, house, degree) naturally, not superficially',
-		'- Balance insight with encouragement; frame challenges as growth opportunities',
-		'- Use their language and meet them where they are emotionally',
-		'- No generic advice. Every response should feel written for them alone',
-		'- Never apologize for astrology or disclaim its value',
-		'- Ask clarifying questions if needed to give them what they truly need',
-	].join('\n');
-}
 
 export async function handleNatalChat(request, env) {
 	const body = await request.json();
@@ -211,7 +134,7 @@ export async function handleNatalChat(request, env) {
 	if (!chartFacts) return { error: 'Invalid chart object', status: 400 };
 
 	const locale = pickLocale(body.lang);
-	const systemPrompt = buildChatSystemPrompt(chartFacts, locale);
+	const systemPrompt = natalChatSystemPrompt({ chartFacts, locale });
 
 	const out = await callOpenAI(env, CHAT_CFG, systemPrompt, message.trim());
 	if (out?.error) return { error: out.error, details: out.raw, status: out.status || 500 };

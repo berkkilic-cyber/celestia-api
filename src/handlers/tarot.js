@@ -2,6 +2,7 @@
 // import { callLlama } from '../lib/llama.js';
 import { callOpenAI } from '../lib/openai.js';
 import { pickLocale } from '../lib/locale.js';
+import { tarotPrompt } from '../prompts.js';
 
 const VALID_SPREAD_TYPES = ['single_card', 'yes_no', 'three_card', 'love', 'career', 'celtic_cross'];
 
@@ -23,22 +24,8 @@ const SPREAD_POSITIONS = {
 	celtic_cross: ['Şimdi', 'Zorluk', 'Geçmiş', 'Gelecek', 'Yukarı', 'Aşağı', 'Tavsiye', 'Dış Etki', 'Umutlar/Korkular', 'Sonuç'],
 };
 
-const TONE_MAP = {
-	single_card: 'reflective and personal',
-	yes_no: 'direct and clear',
-	three_card: 'narrative and flowing',
-	love: 'warm and romantic',
-	career: 'professional and strategic',
-	celtic_cross: 'deep and comprehensive',
-};
-
 // const CFG = { model: 'llama-3.1-8b-instant', max_output_tokens: 1500, temperature: 0.85 };
 const CFG = { model: 'gpt-4o-mini', max_output_tokens: 1500, temperature: 0.85 };
-
-function formatCards(cards, spreadType) {
-	const positions = SPREAD_POSITIONS[spreadType];
-	return cards.map((c, i) => `Position ${i + 1} (${positions[i]}): ${c.name}${c.reversed ? ' (Reversed)' : ''}`).join('\n');
-}
 
 function parseResponse(text) {
 	console.log('[TAROT-DEBUG] Raw response length:', text?.length);
@@ -132,53 +119,14 @@ export async function handleTarot(request, env) {
 	}
 
 	const locale = pickLocale(lang);
-	const langInstruction =
-		{
-			'tr-TR':
-				'Write ENTIRELY in Turkish with CORRECT Turkish characters ALWAYS (ç, ş, ğ, ı, ö, ü, İ). Never use c instead of ç, s instead of ş, g instead of ğ, etc. Check spelling carefully. Use warm, intimate Turkish language that honors spiritual depth. Speak with familiarity and care. Use "sen" for directness',
-			'de-DE':
-				'Write ENTIRELY in German with correct spelling and grammar. German values precision and substantive insight—be specific, grounded, and accurate. Use "du" form for warmth and directness. Proofread for accurate spelling.',
-			'fr-FR':
-				'Write ENTIRELY in French with elegant, poetic language and correct spelling. French values nuance and soul connection—incorporate this with linguistic precision. Use "tu" form for intimacy. Ensure all accents (é, è, ê, à, ù, etc.) are correct.',
-			en: 'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.',
-		}[locale] ||
-		'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.';
-
-	const system = [
-		'You are a wise, compassionate tarot reader creating deeply personal, meaningful readings.',
-		langInstruction,
-		"Your voice is warm, never clinical—speak like you truly understand the querent's heart.",
-		'Tone: calm, premium, grounded, uplifting. Mirror hope without false promises. No emojis. No disclaimers.',
-		'Let the cards tell their story, and help the person hear what they need to know.',
-	].join('\n');
-
-	const questionLine = question?.trim()
-		? `\nThe querent's question: "${question.trim()}"\nAddress this question directly in your reading.`
-		: '';
-
-	const user = [
-		'CRITICAL: Every card MUST have a detailed interpretation. No exceptions.',
-		'Return ONLY valid JSON with this exact structure, no markdown, no preamble:',
-		'',
-		'{',
-		'  "reading": "<250-300 word reading split into 2-3 short paragraphs separated by two newlines>",',
-		'  "summary": "<1-2 sentence summary of the overall message>",',
-		'  "cards": [',
-		'    { "name": "<card name>", "reversed": <bool>, "positionLabel": "<position label>", "interpretation": "<2-3 sentences of detailed explanation specific to this position>" }',
-		'  ]',
-		'}',
-		'',
-		`Spread type: ${spreadType}`,
-		`Tone: ${TONE_MAP[spreadType]}`,
-		'',
-		'Cards drawn:',
-		formatCards(cards, spreadType),
-		questionLine,
-		'',
-		`The cards array MUST have exactly ${expectedCount} element(s) in this exact order: ${SPREAD_POSITIONS[spreadType].join(', ')}.`,
-		'EVERY card must have a non-empty interpretation field explaining its meaning in this position.',
-		'The interpretation should be specific to the card, position, and question (if any).',
-	].join('\n');
+	const { system, user } = tarotPrompt({
+		spreadType,
+		cards,
+		positions: SPREAD_POSITIONS[spreadType],
+		question,
+		locale,
+		expectedCount,
+	});
 
 	for (let attempt = 0; attempt < 2; attempt++) {
 		const out = await callOpenAI(env, CFG, system, user);
