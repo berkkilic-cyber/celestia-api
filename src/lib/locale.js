@@ -6,6 +6,11 @@ export function pickLocale(lang) {
   if (s.startsWith("tr")) return "tr-TR";
   if (s.startsWith("de")) return "de-DE";
   if (s.startsWith("fr")) return "fr-FR";
+  if (s.startsWith("ar")) return "ar";
+  if (s.startsWith("hi")) return "hi";
+  if (s.startsWith("pt")) return "pt-BR";
+  if (s.startsWith("es")) return "es";
+  if (s.startsWith("zh")) return "zh";
   return "en-US";
 }
 

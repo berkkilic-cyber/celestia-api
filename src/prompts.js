@@ -13,6 +13,16 @@ export function langInstruction(locale) {
       'Write ENTIRELY in German with correct spelling and grammar. German values precision and substantive insight—be specific, grounded, and accurate. Use "du" form for warmth and directness. Proofread for accurate spelling.',
     'fr-FR':
       'Write ENTIRELY in French with elegant, poetic language and correct spelling. French values nuance and soul connection—incorporate this with linguistic precision. Use "tu" form for intimacy. Ensure all accents (é, è, ê, à, ù, etc.) are correct.',
+    'ar':
+      'Write ENTIRELY in Modern Standard Arabic with correct grammar, diacritics where helpful, and elegant phrasing. Arabic spiritual tradition is rich—honor it with poetic depth and warmth. Use second-person singular (أنتَ/أنتِ) for directness. Proofread for correct Arabic script and spelling.',
+    'hi':
+      'Write ENTIRELY in Hindi using Devanagari script (हिन्दी). Use warm, conversational Hindi that blends spiritual depth with modern accessibility. Avoid overly Sanskritized or formal language—speak like a wise, caring friend. Use "तुम" for warmth and familiarity. Proofread for correct spelling.',
+    'pt-BR':
+      'Write ENTIRELY in Brazilian Portuguese with warmth, fluidity, and correct spelling. Brazilian culture values heart-centered connection—let your words feel intimate and genuine. Use "você" for directness. Ensure all accents (ã, õ, é, ê, ç, etc.) are correct.',
+    'es':
+      'Write ENTIRELY in Spanish with warmth, clarity, and poetic sensibility. Spanish values emotional depth and expressiveness—speak with passion and care. Use "tú" for intimacy and directness. Ensure all accents (á, é, í, ó, ú, ñ, ¿, ¡) are correct.',
+    'zh':
+      'Write ENTIRELY in Simplified Chinese (简体中文). Use warm, flowing language that honors Chinese spiritual and philosophical traditions. Balance poetic elegance with accessibility—speak like a wise, caring guide. Use "你" for directness and warmth. Proofread for correct characters and natural phrasing.',
     en: 'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.',
   }[locale] ||
     'Write ENTIRELY in English with conversational warmth, wisdom, and correct spelling. Speak directly with "you," creating intimate mentorship. Proofread for accuracy and clarity.';
@@ -28,6 +38,16 @@ export function langInstructionCosmic(locale) {
       'Write entirely in German with clear, grounded language that feels thoughtful and wise. German audiences appreciate precision combined with warmth—be both specific and caring. Use relevant emojis to add visual beauty without overwhelming.',
     'fr-FR':
       "Write entirely in French with elegance and poetic nuance. French readers value sophistication and soul connection—weave in subtle depth and beauty. Use tasteful emojis that enhance the message's emotional resonance.",
+    'ar':
+      'Write entirely in Modern Standard Arabic with poetic, spiritual warmth. Arabic cosmic tradition is ancient and beautiful—let your words carry that weight with grace. Use relevant emojis to enhance the cosmic feeling.',
+    'hi':
+      'Write entirely in Hindi using Devanagari script. Use warm, soulful language that blends cosmic wisdom with everyday warmth. Hindi spirituality is deeply personal—speak from the heart. Use relevant emojis to enhance the cosmic feeling.',
+    'pt-BR':
+      'Write entirely in Brazilian Portuguese with warmth, lightness, and cosmic wonder. Brazilian culture celebrates connection and joy—let your words uplift and inspire. Use relevant emojis to enhance the cosmic feeling.',
+    'es':
+      'Write entirely in Spanish with warmth, passion, and cosmic depth. Spanish values expressiveness and emotional truth—speak with heart and clarity. Use relevant emojis to enhance the cosmic feeling.',
+    'zh':
+      'Write entirely in Simplified Chinese (简体中文) with warmth and cosmic wonder. Draw on Chinese philosophical traditions of harmony and balance. Speak with gentle wisdom and care. Use relevant emojis to enhance the cosmic feeling.',
     en:
       "Write entirely in English with warmth, clarity, and inspiration. Create messages that feel like they're from a trusted cosmic guide. Use relevant emojis to add visual beauty and enhance the spiritual atmosphere.",
   }[locale] ||
@@ -107,6 +127,7 @@ export function relationshipScorePrompt({
   person2ChartFacts,
   compositeChartFacts,
   synastryFacts,
+  locale,
 }) {
   const system =
     'You are a warm, compassionate astrologer reading the dynamics between two souls. You honor both their gifts and growth edges, seeing relationships as sacred mirrors for evolution.';
@@ -126,13 +147,13 @@ Synastry aspects (how they ignite each other): ${synastryFacts}
 Create a beautiful, honest relationship reading as JSON with this structure:
 {
   "overallScore": <number 0-100 representing the relationship's potential and harmony>,
-  "generalText": "<30-40 words in Turkish capturing the essence of their dynamic and what makes it special>",
+  "generalText": "<30-40 words capturing the essence of their dynamic and what makes it special>",
   "tags": [
-    {"emoji": "<1 emoji>", "label": "<1-2 word Turkish label for a key relationship strength or theme>"},
-    {"emoji": "<1 emoji>", "label": "<1-2 word Turkish label>"},
-    {"emoji": "<1 emoji>", "label": "<1-2 word Turkish label>"}
+    {"emoji": "<1 emoji>", "label": "<1-2 word label for a key relationship strength or theme>"},
+    {"emoji": "<1 emoji>", "label": "<1-2 word label>"},
+    {"emoji": "<1 emoji>", "label": "<1-2 word label>"}
   ],
-  "suggestion": "<10-15 words of Turkish wisdom—what this pair should know or do to nurture their bond>",
+  "suggestion": "<10-15 words of wisdom—what this pair should know or do to nurture their bond>",
   "breakdown": {
     "<area1>": <0-100>,
     "<area2>": <0-100>,
@@ -153,7 +174,7 @@ Breakdown categories by relationship type:
 - friendship: Fun & Connection, Communication, Trust, Shared Energy
 - business:   Leadership & Vision, Communication, Trust & Reliability, Synergy
 
-Write ALL text in beautiful, correct Turkish (ç, ş, ğ, ı, ö, ü, İ).
+${langInstruction(locale)}
 No markdown. Valid JSON only.`;
 
   return { system, user };
@@ -255,7 +276,7 @@ function cosmicCommonRules(locale) {
   ].join('\n');
 }
 
-export function dailyCosmicMessagePrompt({ userFacts, locale }) {
+export function dailyCosmicMessagePrompt({ userFacts, locale, today }) {
   const system = `You are a warm, compassionate cosmic guide crafting daily wisdom for a premium lifestyle app.
 Your voice is gentle, authentic, and deeply supportive—like a guiding star.
 Speak as a trusted friend offering perspective and hope, not as an authority.
@@ -278,8 +299,29 @@ Line 2 (KOZMIK_TAVSIYE) - The Action:
 
 Tone: Like a caring cosmic friend who understands them.
 Format: Include relevant emoji(s) that enhance the cosmic feeling. Plain text, 2 lines separated by one newline.
+
+Today's date: ${today}
+
 User context:
 ${userFacts}`;
+
+  return { system, user };
+}
+
+export function natalMapSummaryPrompt({ userFacts, chartFacts, locale }) {
+  const system = `You are a concise astrologer summarizing a natal chart for a premium lifestyle app.
+Your voice is warm, insightful, and direct.
+${cosmicCommonRules(locale)}`;
+
+  const user = `Summarize this natal chart in ONE short paragraph (40–60 words).
+Highlight the most striking theme: the interplay of Sun, Moon, and Rising signs.
+Make it feel personal and meaningful—like a cosmic fingerprint.
+
+User context:
+${userFacts}
+
+Chart data:
+${chartFacts}`;
 
   return { system, user };
 }

@@ -39,7 +39,8 @@ function buildPrompt(action, payload, locale) {
 	].join('\n');
 
 	if (action === 'daily_cosmic_message') {
-		return dailyCosmicMessagePrompt({ userFacts, locale });
+		const today = new Date().toISOString().slice(0, 10);
+		return dailyCosmicMessagePrompt({ userFacts, locale, today });
 	}
 
 	if (action === 'natal_map_summary') {

@@ -33,7 +33,7 @@
 		}
 	],
 	"triggers": {
-		"crons": ["0 0 1 * *", "0 0 * * *"]
+		"crons": ["0 0 * * *"]
 	},
 	"vars": {
 		"APPLE_CLIENT_ID": "com.bkpersonalprojects.celestia",

@@ -15,6 +15,7 @@ import { handlePlacesAutocomplete, handlePlacesDetails } from './handlers/places
 import { purgeDeletedUsers, updateUser, upsertDeviceToken, removeDeviceToken } from './db/users.js';
 import { computeNatal } from './natal-core.js';
 import { handleRewardedCallback } from './handlers/ads.js';
+import { handleVerifyPurchase, handleRestorePurchases, handleGetSubscription, handleAppleNotification } from './handlers/purchases.js';
 import { sendApnsPush } from './lib/apns.js';
 
 const CORS_HEADERS = {
@@ -61,6 +62,9 @@ export default {
 			// ── AdMob SSV callback (called by Google, no auth) ─────────────────
 			// AdMob SSV callback: https://celestia-api.berk-kilic.workers.dev/api/ads/rewarded-callback
 			if (path === '/api/ads/rewarded-callback') return dispatch(await handleRewardedCallback(request, env));
+
+			// ── Apple App Store Server Notifications V2 (no auth, verifies JWS) ─
+			if (path === '/api/apple/notifications' && request.method === 'POST') return dispatch(await handleAppleNotification(request, env));
 
 			// ── Admin: send test push (auth via ADMIN_SECRET bearer) ───────────
 			if (path === '/admin/send-push' && request.method === 'POST') {
@@ -133,6 +137,20 @@ export default {
 			if (path === '/user/credits') {
 				const userId = await requireAuth(request, env);
 				return dispatch(await handleGetCredits(env, userId));
+			}
+			if (path === '/user/subscription') {
+				const userId = await requireAuth(request, env);
+				return dispatch(await handleGetSubscription(env, userId));
+			}
+
+			// ── Purchase routes (auth required) ─────────────────────────────────
+			if (path === '/purchases/verify' && request.method === 'POST') {
+				const userId = await requireAuth(request, env);
+				return dispatch(await handleVerifyPurchase(request, env, userId));
+			}
+			if (path === '/purchases/restore' && request.method === 'POST') {
+				const userId = await requireAuth(request, env);
+				return dispatch(await handleRestorePurchases(request, env, userId));
 			}
 			if (path === '/user/device-token' && request.method === 'POST') {
 				const userId = await requireAuth(request, env);
@@ -230,9 +248,10 @@ export default {
 		}
 	},
 
-	// ── Monthly subscription credit top-up ─────────────────────────────────────
+	// ── Scheduled jobs ────────────────────────────────────────────────────────
+	// Subscription credit top-ups are handled by Apple webhook (DID_RENEW),
+	// so no monthly cron needed for that.
 	async scheduled(event, env, ctx) {
-		if (event.cron === '0 0 1 * *') ctx.waitUntil(monthlyTopUp(env));
 		if (event.cron === '0 0 * * *') ctx.waitUntil(dailyPurge(env));
 	},
 };
@@ -269,24 +288,6 @@ async function requireAuth(request, env) {
 	return userId;
 }
 
-async function monthlyTopUp(env) {
-	const TIER_CREDITS = { premium: 60, premium_plus: 200 };
-	const { results } = await env.celestia_db
-		.prepare(`SELECT user_id, tier FROM subscriptions WHERE status = 'active' AND current_period_end > ?`)
-		.bind(Math.floor(Date.now() / 1000))
-		.all();
-
-	for (const sub of results) {
-		const credits = TIER_CREDITS[sub.tier];
-		if (!credits) continue;
-		await env.celestia_db.prepare(`UPDATE credits SET balance = balance + ? WHERE user_id = ?`).bind(credits, sub.user_id).run();
-		await env.celestia_db
-			.prepare(`INSERT INTO credit_transactions (id, user_id, amount, action) VALUES (?, ?, ?, ?)`)
-			.bind(crypto.randomUUID(), sub.user_id, credits, 'monthly_subscription_topup')
-			.run();
-	}
-	console.log(`Monthly top-up complete for ${results.length} subscribers`);
-}
 
 async function dailyPurge(env) {
 	const count = await purgeDeletedUsers(env.celestia_db);

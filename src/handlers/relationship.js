@@ -50,7 +50,8 @@ function parseResponse(text) {
 
 export async function handleRelationshipScore(request, env) {
 	const body = await request.json();
-	const { relationType, person1, person2, compositeChart, synastryAspects } = body;
+	const { relationType, person1, person2, compositeChart, synastryAspects, lang } = body;
+	const locale = pickLocale(lang);
 
 	if (!relationType || !VALID_RELATION_TYPES.includes(relationType))
 		return { error: 'relationType must be one of: romantic, family, friendship, business', status: 400 };
@@ -76,6 +77,7 @@ export async function handleRelationshipScore(request, env) {
 		person2ChartFacts: buildChartFacts(person2.chart),
 		compositeChartFacts: buildChartFacts(compositeChart),
 		synastryFacts: formatSynastryAspects(synastryAspects),
+		locale,
 	});
 
 	let result;
